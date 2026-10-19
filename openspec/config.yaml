@@ -1,0 +1,33 @@
+schema: spec-driven
+
+# 项目上下文（仅约束 Agent 无法从代码中推断的内容）
+context: |
+  项目：minimum-coding-agent，学习目的的最小可用 ReAct 风格单 Agent Coding Agent。
+  技术栈：Python 3.12（uv 管理，工具链目录本地化）、LangChain/LangGraph、Textual/Rich、MCP。
+  语言约定：代码、标识符、配置键使用英文；README、docs 与 OpenSpec 产物使用中文。
+  代码质量：公开 API（模块级公开函数、公开类、公开方法、Protocol）必须使用 Google Style docstring
+  （Args/Returns/Raises/Yields 按需），私有函数一行摘要，测试代码豁免；机械门禁为
+  ruff（启用 D 规则并设置 Google convention）+ pydoclint + pytest。
+  交付方式：按 tasks.md 的 M0–M9 模块顺序分步实现，每个模块在独立分支完成并通过人工 Review 后
+  才能进入下一模块。
+
+# 分产物规则
+rules:
+  design:
+    - 必须包含模块边界与依赖方向、模块接口契约、统一事件流、配置/状态模型、测试策略、每模块验收标准与 Review 门禁。
+    - 设计变更必须先回写 design/specs/tasks，再修改代码。
+  tasks:
+    - 按 M0–M9 分节，每节包含实现、测试、文档以及一个显式的 Review 门禁任务。
+    - 每个任务的描述必须给出可执行的验证方式（测试、命令或可观察行为）。
+    - 每个模块的 Definition of Done：单测/集成测试全绿、ruff + pydoclint 全绿、模块 demo 可运行、评审包已提交。
+
+# apply / archive 的执行指引
+operations:
+  apply:
+    guidance:
+      - 严格按模块顺序实现；每完成一个模块并通过自测后必须暂停，输出评审包，等待人工 Review 确认后再继续下一模块。
+      - 每个模块在独立分支实现（feat/mX-*），Review 通过后合并到 master；禁止跳过 Review 门禁。
+      - 测试优先使用脚本化模型与临时工作区，不依赖真实模型 API；live 测试默认跳过。
+  archive:
+    guidance:
+      - 归档前确认所有 Review Gate 已通过；归档后核对 9 个 capability 的主 spec 内容完整。
