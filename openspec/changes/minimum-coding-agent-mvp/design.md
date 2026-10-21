@@ -15,7 +15,7 @@
 
 **Goals:**
 
-- 用 9 个可独立验证的模块覆盖 proposal 中全部 capability，模块间依赖单向、可逐模块 Review 与回滚。
+- 用 10 个可独立验证的模块（M0–M9）覆盖 proposal 中全部 capability，模块间依赖单向、可逐模块 Review 与回滚。
 - 单 Agent、显式 LangGraph `StateGraph` 的 ReAct 循环；控制台与 headless 共享同一运行时与事件流。
 - 所有模块的自动化测试可离线运行（脚本化模型 + 临时工作区 + 替身 MCP server）；真实模型测试按需启用。
 - 分模块逐层引入依赖：后续模块不污染前面模块的依赖面。
@@ -26,7 +26,8 @@
 - 不做容器级/进程级沙箱：Bash 工具只提供工作目录、超时、截断与危险命令确认，**不承诺阻止任意系统访问**（见 Risks）。
 - 不做会话持久化、断点恢复、多 Agent 协作、Web UI、Windows 终端适配。
 - 不实现联网检索、LSP/类型推断、多语言代码定位（只保留语言提取器注册架构）。
-- 不追求 UI 视觉打磨、主题切换、i18n；控制台只保证可用性与可测试性。
+- 不做 Theme 模块与主题切换：控制台只保留最小布局样式，仅保证可用性与可测试性；不做 i18n。
+- 不支持 Windows 终端：MVP 仅面向 Linux/macOS 终端。
 - 不为将来 Provider 预写 Anthropic 适配器，只定义注册契约与文档。
 
 ## 总体架构
@@ -76,7 +77,7 @@ minimum-coding-agent/
 │   ├── agent/{state,events,prompts,graph,runtime,context}.py
 │   ├── codeintel/{base,registry,python_extractor}.py
 │   ├── extensions/{commands,instructions,mcp_loader}.py
-│   └── ui/{app,theme,worker,messages,styles.tcss,widgets/*.py}
+│   └── ui/{app,worker,messages,styles.tcss,widgets/*.py}
 └── tests/{unit,integration,ui,live,fixtures}/
 ```
 
@@ -84,14 +85,14 @@ minimum-coding-agent/
 
 ### D2 模块划分与依赖顺序
 
-| 模块 | 主题 | 依赖 | 规模 |
+| 模块 | 内容 | 依赖 | 规模 |
 |---|---|---|---|
 | M0 | 工程地基与配置（uv/pyproject/src 布局、Settings+加载、日志、CLI 骨架、质量门禁） | - | S |
 | M1 | 模型接入层（Provider 协议/注册/OpenAI 兼容/脚本化模型/live smoke） | M0 | S |
 | M2 | 工具系统与基础工具（Registry/路径护栏/文件/编辑/Bash） | M0 | M |
 | M3 | Agent 核心（StateGraph/Prompt/多轮/事件流/headless `run`） | M1,M2 | L |
 | M4 | 规划与 TODO（状态、工具、提示约束） | M3 | S |
-| M5 | Console UI（Textual App/主题/组件/取消与确认） | M3,M4 | L |
+| M5 | Console UI（Textual App/组件/取消与确认；无 Theme） | M3,M4 | L |
 | M6 | 扩展机制（`/` 命令、AGENT.md） | M3,M5 | M |
 | M7 | 代码智能（文本检索 + Python 定位 + 多语言注册架构） | M2 | M |
 | M8 | MCP 集成（配置/加载/命名空间/失败隔离） | M2,M6 | M |
@@ -117,16 +118,18 @@ minimum-coding-agent/
 
 | 工具集 | 工具 | 关键参数 | 说明 |
 |---|---|---|---|
-| filesystem | `list_files` | `path="."` | 列目录，标注类型/大小/是否隐藏 |
-| filesystem | `read_file` | `path, start_line=1, end_line=None` | 带行号与总行数，超长截断 |
+| filesystem | `tree` | `path=".", max_depth=3` | 递归目录树，跳过排除目录，深度/条目上限 |
 | filesystem | `glob_files` | `pattern` | 工作区内 glob，结果上限 |
-| editor | `write_file` | `path, content` | 创建/覆盖，自动建父目录 |
-| editor | `edit_file` | `path, old_text, new_text` | 唯一替换，不唯一/不存在则报错 |
+| editor | `view` | `path, view_range=None` | 文件：1 起始行号，`[start,end]` 闭区间，`end=-1` 到文件末尾；目录：列直接子项 |
+| editor | `create` | `path, file_text` | 创建新文件，已存在则报错不覆盖 |
+| editor | `str_replace` | `path, old_str, new_str` | 唯一精确替换，0/多次命中则报错不修改 |
+| editor | `insert` | `path, insert_line, new_str` | 在指定行后插入，`insert_line=0` 表示文件开头，越界报错 |
 | bash | `run_command` | `command, timeout_seconds=None` | 非交互、工作目录、超时、输出头尾截断 |
 | todo | `write_todos` | `todos[]` | 返回 `Command` 更新会话状态 |
 | search | `search_text` | `query, path=".", glob=None, regex=False, case_sensitive=False, max_results=50` | 工作区文本检索 |
 | code | `code_outline` / `find_definition` / `find_references` | `path` / `name, path="."` | 委托 `codeintel/`，工具层不做解析 |
 
+- **文本编辑语义**：对齐 Claude text editor 的四类工具（`view`/`create`/`str_replace`/`insert`，MVP 不含 `undo_edit`）。行号从 1 开始；`view_range` 为闭区间且 `end=-1` 表示读到文件末尾（仅文件）；`insert_line` 表示"在该行之后插入"，0 表示文件开头；所有编辑要么完整成功要么不修改文件。文件系统工具集只保留 `tree`/`glob_files`，目录的直接子项由 `view` 展示、递归结构由 `tree` 展开。
 - **Bash 安全**：`asyncio.create_subprocess_shell` + `start_new_session=True`，超时 `killpg`；stdout/stderr 各保留头尾并标注截断；剥离已知密钥环境变量（如 `MCA_API_KEY`、provider key 环境变量）后再传递环境；危险命令模式（`rm -rf`、`git reset --hard`、`git clean -fd`、`sudo`、`mkfs`、`dd` 等）通过 `BashPolicy.should_confirm()` 判定，TUI 弹确认框，headless 默认拒绝。
 - **替代方案**：每个工具手写 JSON Schema → 重复且易错；直接暴露 Python 函数给模型 → 无参数校验。`@tool` + pydantic 是 LangChain 生态的最小标准做法。
 
@@ -163,9 +166,9 @@ class AgentState(TypedDict):
     iterations: int
 ```
 
-- **agent 节点**：先做上下文裁剪（见 D7），再调用绑定了工具的模型；流式 token 通过 `astream(stream_mode=["messages", "updates"])` 转发为 `TokenDelta`；`iterations += 1`。
+- **agent 节点**：先运行上下文压缩管线（见 D7），再调用绑定了工具的模型；流式 token 通过 `astream(stream_mode=["messages", "updates"])` 转发为 `TokenDelta`；`iterations += 1`。
 - **tools 节点**：LangGraph `ToolNode`。`write_todos` 通过返回 `Command(update={"todos": ...})` 更新状态；运行时从 `updates` 流中识别 `todos` 变化并发布 `TodosUpdated`。若当前 LangGraph 版本对工具返回 `Command` 支持不可靠，则退化为"工具写回消息 + 后置 TODO 同步节点"（M3/M4 实现时验证，属于实现细节，不改变 spec）。
-- **多轮会话**：`MemorySaver` checkpointer + 每次会话一个 `thread_id`；`/clear` 生成新 `thread_id`。上下文裁剪是运行时职责，不属于模型 provider。
+- **多轮会话与 Checkpoint 扩展点**：checkpointer 是图编译参数而非图节点；运行时通过 `CheckpointBackend` 抽象管理会话状态，MVP 实现内存后端（`MemorySaver`），每次会话一个 `thread_id`，`/clear` 生成新 `thread_id`。持久化后端（SQLite/文件）只需新增 backend 实现并在装配处选择，Agent 图、工具与 UI 不变；MVP 不实现持久化与断点恢复 UX（完整成本见 Risks）。上下文压缩是运行时职责，不属于模型 provider。
 - **迭代上限**：`agent.max_iterations`（默认 30）写入状态比较；达到上限时结束并向用户说明，而不是抛异常。
 - **Prompt 装配**（`agent/prompts.py`）：按固定顺序拼接节段——`ROLE`、`ENVIRONMENT`（工作区/OS/日期/模型名）、`PROJECT_INSTRUCTIONS`（AGENT.md 内容）、`TOOL_POLICY`（先读后改、优先检索、修改后验证、失败自我纠正）、`PLANNING`（TODO 规则）、`RESPONSE_STYLE`。动态值用显式转义拼接而非 `str.format`，避免 AGENT.md 中的花括号破坏模板。
 - **事件流**（`agent/events.py`，frozen dataclass）：
@@ -193,17 +196,25 @@ AgentError(message, where: Literal["model","tool","runtime"], retryable)
 
 ### D7 会话上下文管理
 
-- 在 `agent/context.py` 中实现裁剪：估算 token（`langchain_core.messages.count_tokens_approximately`），保留 system 提示与最近消息，先截断过大的工具输出，再丢弃最早的完整轮次；保证 tool_call 与其 ToolMessage 成对（使用 `trim_messages` 策略并在其后做配对修复）。
-- 上限 `agent.max_context_tokens`（默认按模型窗口保守配置，例如 64k）；超限时在系统提示尾部追加一条简短说明告知模型"更早的工具输出已被截断"，不向用户暴露内部细节。
-- 替代方案：不做裁剪 → 长任务必然触顶报错；按字符硬截断 → 破坏消息结构与工具配对。
+上下文管理采用**可组合压缩管线**，机械裁剪只作为最后兜底：
+
+- 协议：`ContextCompressor`（`name` + `async compress(messages, budget, ctx)`），`ContextPipeline` 按配置顺序执行；`agent/context.py` 提供注册表与装配。
+- 内置压缩器：
+  - `ToolOutputTruncator`：截断过大的历史工具输出（保留头尾与摘要），不删除消息；
+  - `LlmSummarizer`：将较早的对话轮次交给同一模型总结为一条摘要消息，保留系统提示与最近 N 轮；默认关闭，避免 MVP 阶段的额外 API 成本与不确定性；
+  - `WindowDropper`：按完整轮次丢弃最早消息（保证 tool_call 与 ToolMessage 配对），作为**最后兜底**，保证任何情况下都能收敛到预算内。
+- 预算：`agent.context.max_tokens`（默认 64k，保守）；达到软阈值先运行非破坏性压缩器，仍超预算再触发兜底；压缩后追加一条简短说明"更早内容已压缩"，不向用户暴露内部细节。
+- 失败处理：任一压缩器异常或超时 → 记录日志并跳过，继续执行后续压缩器；最终由兜底保证预算。
+- 测试：机械压缩器用构造消息测试；`LlmSummarizer` 用 `ScriptedChatModel` 做离线测试（摘要内容、保留最近轮次、配对完整）；管线失败回退测试。
+- 替代方案：固定 `trim_messages` 单一策略 → 不可组合、无法引入 LLM 摘要；纯 LLM 压缩 → 成本与不确定性高，必须有机械兜底。
 
 ### D8 Console UI
 
 - **结构**：`CodingAgentApp(App)` + `ChatLog`（ScrollableContainer，消息 widget）+ `ChatInput`（TextArea）+ `StatusBar` + `TodoPanel` + 危险命令确认 `ConfirmScreen`。
-- **主题**：`ui/theme.py` 定义颜色/间距/图标 token 并注册 Textual theme，样式集中在 `ui/styles.tcss`；MVP 只做一套深色主题，但 token 化便于后续扩展。
+- **样式**：MVP 不实现 Theme 模块与主题切换，仅用 `ui/styles.tcss` 提供最小布局与可读性样式；后续追加主题不涉及 Agent/工具接口，不构成 breaking change。
 - **并发模型**：提交输入后启动 `AgentRunWorker`（`@work(exclusive=True)` 异步 worker）；worker 消费 `AgentEvent` 流并通过 Textual 自定义消息（`messages.py`）`post_message` 给 UI；UI 主线程永不做阻塞调用。
 - **流式渲染**：`TokenDelta` 先累积，按 ~30ms 定时刷新到 `Markdown` widget，避免每 token 重排；`AssistantMessage` 到达后做最终渲染。
-- **工具卡片**：`ToolCallStarted` 创建卡片（工具名 + 参数摘要），`ToolCallFinished` 更新状态/结果摘要；失败状态用主题中的错误色并默认展开错误。
+- **工具卡片**：`ToolCallStarted` 创建卡片（工具名 + 参数摘要），`ToolCallFinished` 更新状态/结果摘要；失败状态用样式中的错误色并默认展开错误。
 - **取消**：运行中显示忙碌状态；`esc` 触发 worker 取消；取消后恢复输入。运行期间再次提交的处理：**排队或忽略**——MVP 选择"忽略并提示运行中"，避免队列复杂度。
 - **headless**：`cli.py run` 使用同一运行时 + 简单文本渲染器（Rich `Console`），输出事件与最终回答；既是测试/评审路径，也是无 TUI 环境下的可用入口。
 - **可测试性**：`run_test` pilot 测试以脚本化运行时驱动，断言关键文本/卡片出现与消失，不依赖真实模型与真实终端。
@@ -228,7 +239,7 @@ AgentError(message, where: Literal["model","tool","runtime"], retryable)
 
 ### D11 MCP 集成
 
-- **配置**：`mcp.servers[]`（`name/transport/command/args/env/enabled`），MVP 仅支持 `stdio`；启动时校验并给出错误项。
+- **配置与传输扩展点**：`mcp.servers[]`（`name/transport/command/args/env/enabled`）；transport 经注册表解析，MVP 只注册 `stdio`，流式 HTTP/SSE 后续通过新增 transport 接入，不修改 loader/Agent/UI；启动时校验并给出错误项。
 - **加载**：`extensions/mcp_loader.py` 使用 `langchain-mcp-adapters` 的 `MultiServerMCPClient` 作为薄封装（隐藏第三方 API 细节），把返回工具包装为带命名空间 `mcp__<server>__<tool>` 的 LangChain 工具；名称冲突在 Registry 层检测。
 - **生命周期**：在 composition root 启动时异步加载，收集每个服务器的失败为 warning；应用退出时关闭所有连接/子进程。加载失败不影响内置工具与应用启动。
 - **调用**：工具参数结构由 MCP server 声明生成；参数校验失败在本地拦截；远端错误/超时转换为工具结果错误返回模型。
@@ -240,13 +251,12 @@ AgentError(message, where: Literal["model","tool","runtime"], retryable)
 - **pydantic v2 Settings**（分层校验、错误定位、默认值）：
   - `provider`: `name`、`base_url`、`api_key` 或 `api_key_env`（二选一）、`model`、`temperature`、`max_tokens`、`timeout_seconds`。
   - `workspace`、`instructions_file`。
-  - `agent`: `max_iterations`、`max_context_tokens`。
+  - `agent`: `max_iterations`、`context.{max_tokens, compressors[], llm_summary_threshold_tokens}`。
   - `tools.{filesystem,editor,bash,todo,search,code}`：enabled + 各自上限/超时/排除目录/危险命令确认开关。
   - `mcp.servers[]`。
-  - `ui.theme`（MVP 只接受默认值）。
 - **加载优先级**：CLI 参数 > 环境变量 > YAML 文件 > 内置默认值。环境变量使用显式映射（`MCA_BASE_URL`、`MCA_API_KEY`、`MCA_MODEL`、`MCA_CONFIG`、`MCA_WORKSPACE`），不做泛化嵌套覆盖，避免隐式行为。
 - **密钥**：优先 `api_key_env`；允许 `api_key` 但启动时警告；日志/错误/事件中统一脱敏。
-- **示例配置** `config/agent.example.yaml` 提供 OpenAI 兼容端点占位（DeepSeek/Ollama 注释示例），真实端点由用户填写；不含明文密钥。
+- **示例配置**：默认按 DeepSeek 端点占位（`base_url: https://api.deepseek.com`、`model: deepseek-chat`，实际端点/模型/环境变量名由用户后续提供），同时保留 Ollama 注释示例；不含明文密钥。
 
 ### D13 工程与质量规范（项目级）
 
@@ -262,7 +272,7 @@ AgentError(message, where: Literal["model","tool","runtime"], retryable)
 | 层级 | 方式 | 覆盖 |
 |---|---|---|
 | 单元 | pytest + tmp_path | 配置加载/优先级/校验、provider 工厂、路径护栏、每个工具、命令注册、AGENT.md、搜索/定位、MCP 配置校验 |
-| Agent 集成 | `ScriptedChatModel` | ReAct 循环、工具回注、迭代上限、多轮、上下文裁剪、事件序列、TODO 状态 |
+| Agent 集成 | `ScriptedChatModel` | ReAct 循环、工具回注、迭代上限、多轮、上下文压缩（含 LLM 摘要与兜底）、事件序列、TODO 状态 |
 | UI | Textual `run_test` pilot | 提交/流式渲染/工具卡片/TODO 面板/取消/错误呈现 |
 | MCP | stdio 替身服务器 | 加载、命名空间、调用、失败隔离、退出清理 |
 | live（可选） | `pytest -m live`，env 均存在才运行 | M1 端点 smoke（流式）；M9 真实编码任务 E2E（临时工作区修 bug 跑测试） |
@@ -308,7 +318,9 @@ M9 完成后：全量 E2E + live 验证（若提供端点）-> 归档 change
 - [MCP server 卡死或协议不兼容] → 每服务器隔离加载 + 超时 + 退出清理；M8 用替身服务器测试；失败仅告警。
 - [tree-sitter 语法包平台/版本问题] → 使用官方预编译 wheel 并锁版本；解析失败降级错误提示；MVP 只依赖 Python 语法包，减少风险面。
 - [live 测试成本与不确定性] → 默认排除、显式 `-m live`、限制迭代/超时、使用临时工作区；不进入日常质量门禁。
-- [上下文裁剪误删关键信息] → 保留系统提示与最近轮次、先截断工具输出、裁剪后追加提示；用集成测试覆盖工具调用配对完整性。
+- [上下文压缩误删关键信息或摘要偏差] → 保留系统提示与最近轮次、先做非破坏性压缩、机械兜底保证预算；LLM 摘要默认关闭、失败自动回退；用集成测试覆盖工具调用配对完整性。
+- [LLM 摘要带来额外 token 成本与延迟] → 默认关闭，仅在配置阈值触发；摘要调用设超时并入机械兜底；离线测试用脚本化模型，不进入日常质量门禁。
+- [会话持久化扩展点长期未实现导致后续改造成本] → `CheckpointBackend` 契约从 M3 起保持稳定（backend 注册 + `thread_id` 语义），持久化只需新增 backend 与恢复入口，不改 Agent 图/工具/UI。
 
 ## Migration Plan
 
@@ -316,6 +328,4 @@ Greenfield 项目，无数据或接口迁移。交付按 M0→M9 顺序推进，
 
 ## Open Questions
 
-- 示例配置使用哪个真实端点/模型名（DeepSeek、Ollama 或其他）：由用户提供后填入 `config/agent.example.yaml` 注释示例，不影响实现与任务拆分。
-- TUI 的视觉细节（配色、图标、布局比例）：M5 实现时结合截图评审确定，不改变接口与任务拆分。
-- 是否需要 Windows 终端支持：默认仅 Linux/macOS；如后续需要，作为独立能力评估。
+- DeepSeek 示例配置的确切 `base_url`/`model`/密钥环境变量名由用户后续提供，仅影响示例配置、文档与 live 测试环境变量，不阻塞实现与任务拆分。

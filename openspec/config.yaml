@@ -8,6 +8,11 @@ context: |
   代码质量：公开 API（模块级公开函数、公开类、公开方法、Protocol）必须使用 Google Style docstring
   （Args/Returns/Raises/Yields 按需），私有函数一行摘要，测试代码豁免；机械门禁为
   ruff（启用 D 规则并设置 Google convention）+ pydoclint + pytest。
+  工具约定：文本编辑采用 view/create/str_replace/insert 语义（行号 1 起始，view_range 为闭区间且
+  end=-1 表示读到文件末尾，insert_line=0 表示插入到文件开头）；文件系统提供 tree 递归展开与 glob。
+  上下文管理：支持可组合压缩策略，机械压缩（截断工具输出/按轮次丢弃）始终作为最后兜底；LLM 摘要默认关闭。
+  UI 范围：MVP 控制台不含 Theme/主题切换，仅保留最小布局样式。
+  会话状态：MVP 仅使用内存 checkpointer，保留持久化 backend 扩展点，不实现断点恢复 UX。
   交付方式：按 tasks.md 的 M0–M9 模块顺序分步实现，每个模块在独立分支完成并通过人工 Review 后
   才能进入下一模块。
 

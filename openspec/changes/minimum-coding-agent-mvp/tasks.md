@@ -7,7 +7,7 @@
 - [ ] 1.3 实现 CLI 骨架：默认入口（TUI 占位）、`run` 子命令占位、`--version`、`--help`、`--config/--workspace` 覆盖，验证：CLI 参数处理与退出码单测通过
 - [ ] 1.4 实现启动前校验（工作区存在且可写、模型端点配置完整）与可读错误输出，验证：非法工作区/缺失端点的启动失败单测通过
 - [ ] 1.5 配置 ruff（启用 `D` 规则并设为 Google convention）、pydoclint、pytest（默认排除 `live`）与 `make check`，验证：`make check` 全绿，且故意缺失 docstring 的样例能被检出并定位
-- [ ] 1.6 编写 `config/agent.example.yaml`、`docs/conventions.md`（Google Style docstring/质量门禁/提交规范）、`AGENT.md` 骨架，验证：示例配置可被加载器解析，文档中的命令可执行
+- [ ] 1.6 编写 `config/agent.example.yaml`（默认 DeepSeek 端点占位、无明文密钥）、`docs/conventions.md`（Google Style docstring/质量门禁/提交规范）、`AGENT.md` 骨架，验证：示例配置可被加载器解析，文档中的命令可执行
 - [ ] 1.7 输出 M0 评审包并暂停，等待人工 Review 确认；确认通过后勾选本任务
 
 ## 2. M1 模型接入层
@@ -24,8 +24,8 @@
 
 - [ ] 3.1 实现 `Toolset` 协议、`ToolContext`、工具 Registry 与统一结果协议（`{"ok": ...}`），验证：注册、重名拒绝、禁用工具集单测通过
 - [ ] 3.2 实现 `WorkspaceGuard` 路径护栏，验证：`..` 逃逸、绝对路径逃逸、符号链接逃逸、工作区外写入的拒绝单测通过
-- [ ] 3.3 实现 filesystem 工具集（`list_files`/`read_file`/`glob_files`），验证：行号与总行数、长文件截断、二进制拒绝、结果上限单测通过
-- [ ] 3.4 实现 editor 工具集（`write_file`/`edit_file`），验证：唯一替换、不唯一/不存在报错不修改、父目录创建的单测通过
+- [ ] 3.3 实现 filesystem 工具集（`tree` 递归目录树、`glob_files`；排除目录、深度与条目上限），验证：目录树展开、深度限制、排除目录与结果截断的单测通过
+- [ ] 3.4 实现 editor 工具集（`view` 文件/目录查看、`create`、`str_replace`、`insert`；1 起始行号、`end=-1` 到文件末尾、插入 0 表示开头），验证：范围读取、目录列表、创建冲突不覆盖、唯一替换、替换不唯一/不存在、插入越界均不修改文件的单测通过
 - [ ] 3.5 实现 Bash 工具集（工作目录、超时终止、输出头尾截断、退出码、危险命令确认钩子、密钥环境变量剥离），验证：真实子进程单测（含 `sleep` 超时）通过
 - [ ] 3.6 编写 `docs/tools.md`（工具清单、参数、错误语义、安全边界），验证：文档示例调用与工具实际输出一致
 - [ ] 3.7 输出 M2 评审包并暂停，等待人工 Review 确认；确认通过后勾选本任务
@@ -34,8 +34,8 @@
 
 - [ ] 4.1 实现 `AgentState` 与 LangGraph `StateGraph`（agent/tools 节点、条件边、迭代计数与上限），验证：脚本化模型"工具调用→结果回注→最终回答"集成测试通过
 - [ ] 4.2 实现系统提示装配（ROLE/ENVIRONMENT/TOOL_POLICY/PLANNING/RESPONSE_STYLE，及项目指令占位插入），验证：各节段存在、含工作区与模型信息、指令内容中的花括号不影响模板的单测通过
-- [ ] 4.3 接入 `MemorySaver` 多轮会话与 `thread_id` 隔离，验证：同会话引用前文、新会话清空、会话隔离的集成测试通过
-- [ ] 4.4 实现上下文裁剪（近似 token 计数、保留系统提示与最近消息、优先截断工具输出），验证：超限裁剪后 tool_call/ToolMessage 配对完整、最近消息保留的测试通过
+- [ ] 4.3 接入 `CheckpointBackend` 抽象与 `MemorySaver` 默认实现、多轮会话与 `thread_id` 隔离（预留持久化后端扩展点），验证：同会话引用前文、新会话清空、会话隔离与扩展点契约的集成测试通过
+- [ ] 4.4 实现可组合上下文压缩管线（`ToolOutputTruncator`、可选 `LlmSummarizer`、`WindowDropper` 机械兜底），验证：机械兜底满足预算、脚本化模型 LLM 摘要、摘要失败回退、tool_call/ToolMessage 配对完整的测试通过
 - [ ] 4.5 实现 `AgentEvent` 定义、运行时异步事件迭代器与取消语义，验证：事件顺序、工具事件含名称/结果摘要、错误与取消事件的集成测试通过
 - [ ] 4.6 实现 headless `mca run` 文本渲染器（事件过程 + 最终结果 + 退出码），验证：脚本化模型下 CLI 集成测试通过；里程碑 A demo 可复现
 - [ ] 4.7 编写 `docs/architecture.md`（分层、图结构、事件流、配置装配），验证：文档描述与实现的节点/事件类型一致
@@ -51,7 +51,7 @@
 
 ## 6. M5 Console UI
 
-- [ ] 6.1 实现 Textual App 骨架、双栏布局、主题 token、状态栏与样式文件，验证：`run_test` 启动应用并断言关键区域与状态栏文本通过
+- [ ] 6.1 实现 Textual App 骨架、双栏布局、最小布局样式、状态栏，验证：`run_test` 启动应用并断言关键区域与状态栏文本通过
 - [ ] 6.2 实现 ChatLog 与流式 Markdown 渲染（增量刷新、最终渲染、自动滚动），验证：`run_test` 流式增量与最终消息断言通过
 - [ ] 6.3 实现工具调用卡片（开始/成功/失败、参数与结果摘要），验证：`run_test` 三种状态的卡片断言通过
 - [ ] 6.4 实现 TODO 面板（实时刷新、空状态、不影响对话主区域），验证：`run_test` 空状态与更新断言通过
@@ -80,7 +80,7 @@
 ## 9. M8 MCP 集成
 
 - [ ] 9.1 实现 MCP 配置模型与校验（stdio、必填字段、重名、不支持的 transport），验证：合法/非法配置单测通过
-- [ ] 9.2 实现 `MCPToolLoader`（薄封装 MultiServerMCPClient、`mcp__<server>__<tool>` 命名空间、加载失败隔离、调用超时），验证：stdio 替身服务器的加载、调用、参数错误、失败隔离集成测试通过
+- [ ] 9.2 实现 `MCPToolLoader`（transport 注册表、stdio 传输、MultiServerMCPClient 薄封装、`mcp__<server>__<tool>` 命名空间、加载失败隔离、调用超时；预留流式 HTTP transport 扩展点），验证：stdio 替身服务器的加载、调用、参数错误、失败隔离集成测试通过
 - [ ] 9.3 实现 MCP 生命周期（启动加载并收集 warning、退出关闭连接与子进程），验证：应用退出后无残留子进程、单服务器失败不影响启动的测试通过
 - [ ] 9.4 编写 `docs/mcp.md` 与示例配置，验证：按文档配置替身服务器后可完成一次 MCP 工具调用
 - [ ] 9.5 输出 M8 评审包并暂停，等待人工 Review 确认（里程碑 C：README 功能全覆盖）；确认通过后勾选本任务
