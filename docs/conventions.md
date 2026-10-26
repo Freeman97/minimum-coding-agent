@@ -50,7 +50,7 @@ minimum-coding-agent/
 │   ├── codeintel/                  # 规划：M7 代码智能
 │   ├── extensions/                 # 规划：M6 命令与 AGENT.md、M8 MCP
 │   └── ui/                         # 规划：M5 Textual 控制台
-└── tests/                          # M0 起：unit / integration / ui / live / fixtures
+└── tests/                          # M0：unit/；integration/ui/live/fixtures 随对应模块加入
 ```
 
 依赖方向由 `design.md` D1 规定：入口层（`cli.py`、`ui/`）只依赖运行时与配置；`agent/` 依赖
@@ -72,9 +72,9 @@ minimum-coding-agent/
   Python 3.10 是兼容基线：不要使用 3.11+ 才有的语法或标准库 API，`ruff` 的 `target-version = "py310"`
   会做静态检查。
 - **命令入口**：日常操作统一走 `make`；Makefile 会导出 `UV_CACHE_DIR`、`UV_PYTHON_INSTALL_DIR`、
-  `UV_PROJECT_ENVIRONMENT`，保证不写到工作区之外。需要直接调用 uv 时使用 `.tools/uv run ...`，并保持
-  这些变量指向仓库内目录；直接运行 `uv run ...` 也可用（`uv.toml` 已把 cache 固定到 `.uv-cache/`），
-  但 make 目标会同时固定解释器与虚拟环境，日常以 make 为准。
+  `UV_PROJECT_ENVIRONMENT`，保证不写到工作区之外。需要直接调用 uv 时使用项目内 `.tools/uv run ...`；
+  在仓库根目录直接运行 `uv run ...` 也可用（`uv.toml` 已把 cache 固定到 `.uv-cache/`），但它会使用 PATH 中
+  的 uv 而不仅是项目内固定版本，因此日常仍以 make 目标为准。不要使用系统 pip 或工作区外缓存。
 - **不要使用**系统 pip、全局 uv、外部 venv；不要手工编辑 `.venv/`。
 - **锁定**：运行期依赖写在 `pyproject.toml` 的 `dependencies`，开发工具写在 `dependency-groups.dev`；
   更新后用 `uv sync` 重新生成并提交 `uv.lock`。
@@ -97,7 +97,8 @@ minimum-coding-agent/
 
 - `make lint` 的 ruff 范围是 `src tests`（`scripts/` 等不参与），pydoclint 只检查 `src`。
 - `make run` 前必须有可用的 provider 配置与 API Key（例如 `MCA_CONFIG=config/agent.yaml DEEPSEEK_API_KEY=... make run`）；
-  否则启动校验失败并以 exit code 4 退出，这是预期行为。
+  否则启动校验失败：底层 `mca` 进程以 exit code 4 退出，`make` 自身则以 2 退出（目标失败）。以 `mca` 的退出码
+  判断失败原因，这是预期行为。
 - `make check` 是每个模块的 Definition of Done 的第一条；失败时修代码，不要靠删测试或全局关闭规则来规避。
 - 首次使用、依赖变化或 `uv.lock` 更新后重新执行 `make setup`；bootstrap 是幂等的，失败会重试依赖同步。
 - 不要在 `make setup` 运行期间并行执行 `make check` 等目标（会争用同一个 `.venv`）。
@@ -163,8 +164,8 @@ def count_lines(path: Path) -> int:
 - **pydoclint**：`style = "google"`，检查 Google Style docstring 的 `Args/Returns/Raises` 一致性；关键选项为
   `arg-type-hints-in-docstring = false`（类型由签名标注承载）、`check-return-types = false`、
   `allow-init-docstring = true`、`skip-checking-short-docstrings = false`（公开函数一行摘要也要补全）、
-  `skip-checking-private-functions = true`（私有函数只写摘要）。调用时必须显式传
-  `--config pyproject.toml`（pydoclint 不会自动发现 pyproject 配置）。
+  `skip-checking-private-functions = true`（私有函数只写摘要）。pydoclint 默认会读取当前目录 `pyproject.toml`
+  的 `[tool.pydoclint]`；Makefile 仍显式传 `--config pyproject.toml`，保证从任意目录调用时使用同一份配置。
 - **pytest**：`minversion = 8.0`、`testpaths = ["tests"]`、`addopts = "-m 'not live'"`；`live` marker
   在 `pyproject.toml` 中注册，代表"调用真实模型端点"的测试，默认不执行。
 - 不新增全局忽略规则；确需局部豁免时在 `pyproject.toml` 的 per-file-ignores 中精确指定路径，并在评审包
@@ -194,7 +195,12 @@ def count_lines(path: Path) -> int:
 - 相对 `workspace` 相对启动时的当前目录解析，加载后会被规范化为绝对路径；启动校验要求该目录存在、
   是目录且可写（否则 exit code 4）。
 - 严格模式：出现未定义的键、类型错误或越界取值时启动失败，错误信息包含文件路径、字段路径与原因
-  （exit code 3），且不打印敏感值。
+  （exit code 3），且不打印敏感值。空的或纯空白的 `provider.api_key` / `base_url` / `model` /
+  `api_key_env` / `instructions_file` 视为非法配置（exit code 3）；`api_key_env` 指向的环境变量为空或纯空白
+  时视为未配置 API Key（启动校验 exit code 4）。
+- **只读取这五个 `MCA_*` 变量**：裸 `BASE_URL` / `MODEL` / `API_KEY` / `WORKSPACE` / `CONFIG` 等环境变量
+  一律忽略，避免 CI 或 shell 中的同名变量意外改变配置；`load_settings(environ=...)` 的注入完全隔离于进程
+  环境变量，测试因此可以在任意环境下复现。
 - 示例配置为 `config/agent.example.yaml`；使用时复制为 `config/agent.yaml`（已被 gitignore），
   通过 `--config` 或 `MCA_CONFIG` 指定，不要直接修改示例文件来填写真实密钥。
 - **新增配置键**必须同时更新 `src/minimum_coding_agent/config/settings.py` 的 pydantic 模型、
@@ -211,7 +217,8 @@ def count_lines(path: Path) -> int:
   `MCA_API_KEY`）时启动会打印告警：
   `provider.api_key is set inline; prefer provider.api_key_env ...`。该告警不是错误，但应在本地排查后消除。
 - 密钥在模型层用 `pydantic.SecretStr` 保存，报错信息通过 `hide_input_in_errors=True` 隐藏输入；
-  需要打印配置时调用 `Settings.redacted_dict()`，其中 `provider.api_key` 固定显示为 `***REDACTED***`。
+  需要打印配置时调用 `Settings.redacted_dict()`，其中 `provider.api_key` 固定显示为 `***REDACTED***`，
+  `mcp.servers[*].env` 的所有值也会被遮蔽（这些值常用于传递 MCP 连接密钥）。
 - 禁止把密钥写入日志、异常、事件、测试快照、commit message 或 README；禁止 `echo $DEEPSEEK_API_KEY`
   之类的调试命令留在脚本或文档中。
 - `.env`、`config/agent.yaml` 已被 gitignore；提交前用 `git status` / `git diff` 自查是否误带本地配置。
@@ -313,8 +320,8 @@ D17 记录模板（每模块一条，不超过 10 行，只写"为什么/取舍/
   live 相关环境变量（M1 定义）。
 - 测试独立可重复：不依赖执行顺序、不共享可变全局状态、不依赖当前工作目录；需要文件系统时一律用 `tmp_path`
   或 `tmp_path_factory`。
-- 命名与结构：`tests/unit/`、`tests/integration/`、`tests/ui/`、`tests/live/`、`tests/fixtures/`；
-  文件 `test_*.py`，函数 `test_<行为>`，断言说明失败时的可理解原因。
+- 命名与结构：M0 只有 `tests/unit/`；`tests/integration/`、`tests/ui/`、`tests/live/`、`tests/fixtures/`
+  随对应模块（M3/M5/M1/M8 等）加入。文件 `test_*.py`，函数 `test_<行为>`，断言说明失败时的可理解原因。
 - 关键断言优先验证**事件序列与工作区副作用**（文件内容、退出码、输出文本），而不是内部实现细节。
 - M0 的测试必须覆盖：配置优先级、未知字段拒绝、密钥脱敏、CLI 参数与退出码 0/2/3/4、启动校验失败路径，
   以及"缺失 docstring 的样例能被质量门禁检出"。

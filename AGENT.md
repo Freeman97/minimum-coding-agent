@@ -49,8 +49,9 @@
   与相关文档；配置是严格模式，未知键会启动失败。
 - 优先 `provider.api_key_env`；不提交明文密钥、`.env`、`config/agent.yaml`；不打印或记录密钥；输出配置
   时使用 `Settings.redacted_dict()`。
-- 命令与脚本一律走 `make` 或 `.tools/uv run ...`；不使用系统 pip、全局 uv 或工作区外缓存（bootstrap 在
-  无法下载 uv 时会把系统 uv 复制到 `.tools/uv` 并告警，项目路径仍是唯一入口）。
+- 命令与脚本优先走 `make` 或 `.tools/uv run ...`；在仓库根目录直接 `uv run ...` 也可以（`uv.toml` 把缓存放
+  在项目内），但不要使用系统 pip 或工作区外缓存。bootstrap 在无法下载 uv 时会把系统 uv 复制到 `.tools/uv`
+  并告警，项目路径仍是唯一入口。
 
 ## 文档与交付
 
