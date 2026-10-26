@@ -189,3 +189,41 @@ def test_cli_workspace_overrides_environment(
     output = capsys.readouterr().out
     assert str(cli_workspace) in output
     assert str(environment_workspace) not in output
+
+
+def test_unknown_provider_is_startup_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = tmp_path / "agent.yaml"
+    config.write_text(
+        "\n".join(
+            [
+                "provider:",
+                "  name: unknown-vendor",
+                "  base_url: https://api.example.com",
+                "  model: test-model",
+                "  api_key_env: TEAM_API_KEY",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("TEAM_API_KEY", "sk-test")
+
+    code = main(["--config", str(config), "--workspace", str(tmp_path)])
+
+    assert code == int(ExitCode.STARTUP_ERROR)
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "unknown model provider 'unknown-vendor'" in captured.err
+    assert "available providers: openai-compatible" in captured.err
+    assert "sk-test" not in captured.err
+
+
+def test_configured_provider_is_accepted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    set_valid_environment(monkeypatch)
+    code = main(["--workspace", str(tmp_path)])
+    assert code == int(ExitCode.OK)
+    output = capsys.readouterr().out
+    assert "Provider: openai-compatible, model: test-model" in output
