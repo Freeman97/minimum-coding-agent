@@ -15,6 +15,8 @@ context: |
   会话状态：MVP 仅使用内存 checkpointer，保留持久化 backend 扩展点，不实现断点恢复 UX。
   交付方式：按 tasks.md 的 M0–M9 模块顺序分步实现，每个模块在独立分支完成并通过人工 Review 后
   才能进入下一模块。
+  跨会话交接：一个模块一个新会话；会话间只通过 OpenSpec 产物、代码/测试与 git 交接。评审结论与偏差
+  写回 design.md 的 D17 记录，新增工作补进 tasks.md，行为契约变化更新 specs；不依赖独立文档或聊天记忆。
 
 # 分产物规则
 rules:
@@ -32,6 +34,7 @@ operations:
     guidance:
       - 严格按模块顺序实现；每完成一个模块并通过自测后必须暂停，输出评审包，等待人工 Review 确认后再继续下一模块。
       - 每个模块在独立分支实现（feat/mX-*），Review 通过后合并到 master；禁止跳过 Review 门禁。
+      - 评审通过后先把结论写回 design.md D17 与 tasks.md（新增工作补任务、契约变化改 specs、方案变化改 Decision），再合并并勾选 Review Gate；交接不依赖独立文档或会话记录。
       - 测试优先使用脚本化模型与临时工作区，不依赖真实模型 API；live 测试默认跳过。
   archive:
     guidance:

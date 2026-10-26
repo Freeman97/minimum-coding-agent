@@ -288,26 +288,51 @@ AgentError(message, where: Literal["model","tool","runtime"], retryable)
 - 依赖按模块增量加入：M0 只加基础依赖；M1 加 `langchain-openai`；M7 加 `tree-sitter`/`tree-sitter-python`；M8 加 `mcp`/`langchain-mcp-adapters`。
 - `.gitignore` 覆盖 `.venv/`、`.tools/`、`.uv-cache/`、`.uv-python/`、`.env`、缓存目录。
 
-### D16 交付流程与 Review 门禁
+### D16 交付流程、Review 门禁与跨会话交接
+
+**会话边界**：一个模块一个新会话；本对话只完成总体设计，M0 在全新会话启动。新会话通过 `openspec instructions apply` 自动获得 proposal/specs/design/tasks 与 config 的 context/operationGuidance，再按需读取现有代码与 git 状态；**不依赖上一会话的聊天记录**。
 
 ```
-Phase 0  总体设计 Review（本 change 的 proposal/specs/design/tasks）
-            | 通过
-            v
-For Mx in M0..M9:
-   分支 feat/mx-* -> 实现 -> make check + 模块 demo
-        -> 评审包（摘要/diff/运行方式/测试输出/风险）
-        -> 人工 Review
-             |-- 需修改: 改代码/加测 -> 重跑 -> 再 Review（循环）
-             +-- 通过: 合并 master -> 勾选 tasks -> 下一模块
-            v
-M9 完成后：全量 E2E + live 验证（若提供端点）-> 归档 change
+[会话 N] openspec instructions apply（自动含 proposal/specs/design/tasks）
+    -> 读当前模块 tasks 段、相关 Decision、D17 最近记录、git status/log
+    -> 分支 feat/mx-* -> 实现 + 测试 -> make check + 模块 demo
+    -> 输出评审包 -> 人工 Review
+         |-- 需修改：本会话继续迭代 -> 重跑 -> 再 Review
+         +-- 通过：写回产物（D17 / tasks；必要时 specs/design）-> 合并 master
+                  -> 勾选 Review Gate -> 结束会话
+[会话 N+1] 新会话重新 apply，自动读取刚写回的产物 -> 下一个模块
 ```
 
+- **会话启动**：只实现指定模块，显式声明"不进入下一模块"；先读 `openspec instructions apply` 返回的 tasks 对应段、design 相关 Decision 与 D17 记录、相关 spec，以及 `git status/log`。
+- **会话结束**：`make check` 全绿、模块 demo 通过；输出评审包；Review 通过后先将结论写回 `design.md` D17 与 `tasks.md`（新增工作立即补成任务；行为契约变化更新 `specs`；方案变化更新对应 Decision），再合并 master 并勾选 Review Gate。
 - **评审包固定字段**：改了什么/为什么、对外接口或行为变化、如何运行 demo、测试与质量命令输出、已知限制/风险、建议 Review 重点。
-- **Definition of Done（每模块）**：`make check` 全绿；模块 demo 可运行；无未解决的设计偏差；公开 API 有合规 docstring；评审包已提交。
-- **设计变更**：先 `openspec update` 修订 design/specs/tasks，再改代码；禁止代码领先文档。
+- **Definition of Done（每模块）**：`make check` 全绿；模块 demo 可运行；无未解决的设计偏差；公开 API 有合规 docstring；评审包已提交；**评审结论已写回产物（D17/tasks，必要时 specs/design）**。
+- **设计变更**：使用 `/openspec-update-change` 修订 design/specs/tasks（或直接编辑后 `openspec validate`），再改代码；禁止代码领先文档。注意 `openspec update` CLI 用于刷新生成的指令文件，不用于修订产物内容。
 - **回滚**：模块未合并前丢弃分支即可；已合并可用 `git revert`；无数据迁移。
+
+### D17 实现决策与偏差记录（跨会话交接）
+
+跨会话只通过 change 产物、代码/测试与 git 交接；`design.md` 属于 apply 自动加载的 `contextFiles`，因此把"为什么/取舍/偏差"集中记录在本节。每个模块 Review 通过后、会话结束前追加一条（不超过 10 行），后续会话自动读取。
+
+记录模板：
+
+```markdown
+#### Mx <模块名>
+
+- 分支/提交：`feat/mx-*`，`<sha>`..`<sha>`
+- 交付范围：...
+- 与设计的偏差及原因：...（无则写"无"）
+- 评审中定下的取舍：...
+- 对后续模块的影响/前置条件：...（必须同步落到 tasks.md 任务或对应 Decision）
+- 遗留问题/已知限制：...
+```
+
+规则：
+
+- 只有"为什么/取舍/偏差"进本节；可执行项落到 `tasks.md`，行为契约变化改 `specs`，方案变化改对应 Decision（D1–D16）。
+- 测试日志与完整 diff 留在会话评审包与 git commit，不写入本节，保持可读性与低噪声。
+- 归档后本节随 change 进入 archive；需要长期保留的内容在 M9 提炼到 README/docs。
+- 若某条交接信息会影响尚未开始的模块，必须**立即**更新该模块的 tasks 或 design 决策，不能只留在记录里。
 
 ## Risks / Trade-offs
 
