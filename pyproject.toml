@@ -1,0 +1,71 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "minimum-coding-agent"
+dynamic = ["version"]
+description = "A minimal ReAct-style coding agent built for learning purposes."
+readme = "README.md"
+# CPython 3.12 is preferred (see docs/conventions.md); the toolchain falls back
+# to the system Python 3.10 when 3.12 cannot be installed offline.
+requires-python = ">=3.10"
+dependencies = [
+    "pydantic>=2.10,<3",
+    "pydantic-settings>=2.6,<3",
+    "pyyaml>=6.0.2,<7",
+]
+
+[project.scripts]
+mca = "minimum_coding_agent.cli:main"
+
+[dependency-groups]
+dev = [
+    "pydoclint>=0.6,<1",
+    "pytest>=8.3,<10",
+    "ruff>=0.8,<1",
+]
+
+[tool.hatch.version]
+path = "src/minimum_coding_agent/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/minimum_coding_agent"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+addopts = "-m 'not live'"
+markers = [
+    "live: tests that call a real model endpoint (opt-in, excluded by default)",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+src = ["src", "tests"]
+extend-exclude = [".venv", ".tools", ".uv-cache", ".uv-python"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "D"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D"]
+"scripts/**" = ["D"]
+
+[tool.pydoclint]
+style = "google"
+# Google-style docstrings document argument names without repeating type hints
+# (the annotations already carry them), and class docstrings may coexist with
+# __init__ docstrings.
+arg-type-hints-in-docstring = false
+check-return-types = false
+allow-init-docstring = true
+check-class-attributes = false
+# Enforce Args/Returns on every public function, even if its docstring is a
+# single line; private helpers may keep a one-line summary.
+skip-checking-short-docstrings = false
+skip-checking-private-functions = true
