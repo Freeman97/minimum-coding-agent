@@ -3,21 +3,21 @@
 本文件是仓库级工程约定的正文，面向人类开发者与 AI Coding Agent。`openspec/config.yaml` 只记录
 Agent 无法从代码推断的项目上下文，`AGENT.md` 是项目指令的简短版本，更细的工程规则以本文件为准。
 
-## 当前状态（M0）
+## 当前状态（M1）
 
-当前处于 M0（工程地基与配置）。下表中的"已存在"指本分支 `feat/m0-foundation` 的真实能力：
+当前处于 M1（模型接入层）。下表中的"已存在"指本分支 `feat/m1-model-provider` 的真实能力：
 
-| 能力 | M0 现状 |
+| 能力 | M1 现状 |
 |---|---|
-| CLI `mca` | 参数解析与启动校验；无子命令时打印 TUI 占位提示后退出；`mca run "<task>"` 为 headless 占位（M3 实现） |
+| CLI `mca` | 参数解析、启动校验与 provider 名称校验；无子命令时打印 TUI 占位提示后退出；`mca run "<task>"` 为 headless 占位（M3 实现） |
 | 配置 | pydantic v2 Settings、分层加载、严格校验、启动前校验、密钥脱敏 |
+| 模型接入 | provider 协议/注册表、`openai-compatible` provider、流式封装、错误分类与脱敏、`ScriptedChatModel`、live smoke（见 `docs/providers.md`） |
 | 质量门禁 | `make check` = ruff + pydoclint + pytest（离线，默认排除 live） |
-| 模型接入 | M1 实现；M0 只校验 `provider` 的 `base_url` / `model` / 密钥是否完整 |
-| 工具系统 / TUI / 命令扩展 / AGENT.md 注入 / MCP | 分别由 M2 / M5 / M6 / M6 / M8 实现，M0 尚无这些能力 |
+| 工具系统 / TUI / 命令扩展 / AGENT.md 注入 / MCP | 分别由 M2 / M5 / M6 / M6 / M8 实现，M1 尚无这些能力 |
 
 因此：文档、示例配置与测试中不要宣称上表中"未实现"的能力已经可用；命令示例只使用当前真实存在的
-`make setup|check|lint|test|run` 与已实现的 `mca` 参数。`make test-live`（M1 起）与 `make demo`
-（M3 起）是后续模块的目标命令，当前 Makefile 尚未提供，不要假设它们可执行。
+`make setup|check|lint|test|test-live|run|demo-llm` 与已实现的 `mca` 参数。`make test-live` 需要
+`MCA_LIVE_*` 环境变量，`make demo-llm` 是 M1 的离线 demo；`make demo` 在 M3 才加入。
 
 ## 1. 语言与命名
 
@@ -43,19 +43,19 @@ minimum-coding-agent/
 │   ├── __init__.py / __main__.py
 │   ├── cli.py                      # M0：参数解析、启动校验、入口占位
 │   ├── config/                     # M0：settings / loader / validation
-│   ├── app.py                      # 规划：composition root（M3/M5 逐步接入）
-│   ├── llm/                        # 规划：M1 模型接入层
+│   ├── app.py                      # 规划：composition root（M3 起接入）
+│   ├── llm/                        # M1：provider 协议/注册表/流式封装/错误分类/脚本化模型
 │   ├── tools/                      # 规划：M2 工具系统（M7 增加代码工具）
 │   ├── agent/                      # 规划：M3 运行时 / 事件 / 上下文压缩
 │   ├── codeintel/                  # 规划：M7 代码智能
 │   ├── extensions/                 # 规划：M6 命令与 AGENT.md、M8 MCP
 │   └── ui/                         # 规划：M5 Textual 控制台
-└── tests/                          # M0：unit/；integration/ui/live/fixtures 随对应模块加入
+└── tests/                          # M0 起 unit/；M1 加 live/、fixtures/；integration/ui 随对应模块加入
 ```
 
 依赖方向由 `design.md` D1 规定：入口层（`cli.py`、`ui/`）只依赖运行时与配置；`agent/` 依赖
 `llm/`、`tools/`、`codeintel/`；`tools/` 与 `extensions/` 不依赖 UI；任何模块都不 import 入口层。
-新增模块时先确认依赖方向，禁止反向依赖。
+新增模块时先确认依赖方向，禁止反向依赖。模型接入层的使用与扩展契约见 `docs/providers.md`。
 
 ## 3. 工具链（工作区本地化）
 
@@ -78,8 +78,8 @@ minimum-coding-agent/
 - **不要使用**系统 pip、全局 uv、外部 venv；不要手工编辑 `.venv/`。
 - **锁定**：运行期依赖写在 `pyproject.toml` 的 `dependencies`，开发工具写在 `dependency-groups.dev`；
   更新后用 `uv sync` 重新生成并提交 `uv.lock`。
-- **按模块增量添加依赖**：M0 只保留基础依赖，M1 加 `langchain-openai`，M7 加 `tree-sitter` 系列，
-  M8 加 `mcp` / `langchain-mcp-adapters`。不要提前引入后续模块的依赖。
+- **按模块增量添加依赖**：M0 只保留基础依赖；M1 已加 `langchain-openai`（含 `langchain-core`）与开发依赖
+  `pytest-asyncio`；M7 加 `tree-sitter` 系列，M8 加 `mcp` / `langchain-mcp-adapters`。不要提前引入后续模块的依赖。
 - `.venv/`、`.tools/`、`.uv-cache/`、`.uv-python/`、`config/agent.yaml`、`.env` 均已 gitignore，禁止提交。
 
 ## 4. make 命令
@@ -92,14 +92,19 @@ minimum-coding-agent/
 | `make setup` | `bash scripts/bootstrap.sh` | 安装项目内 uv、Python 解释器与锁定依赖，并验证 `import minimum_coding_agent` |
 | `make lint` | `.tools/uv run ruff check src tests`；`.tools/uv run pydoclint --config pyproject.toml src` | 静态检查 + Google Style docstring 校验 |
 | `make test` | `.tools/uv run pytest` | 离线测试（`addopts = -m 'not live'` 自动排除 live） |
+| `make test-live` | `.tools/uv run pytest -m live` | live 模型 smoke；需 `MCA_LIVE_*` 变量，缺失时自动 skip |
 | `make check` | `lint` + `test` | 质量门禁，提交与评审前必须全绿 |
 | `make run` | `.tools/uv run mca` | 启动交互控制台；M5 前只打印占位提示并退出 |
+| `make demo-llm` | `.tools/uv run python scripts/demo_llm.py` | M1 模型接入层离线 demo（不访问网络） |
 
 - `make lint` 的 ruff 范围是 `src tests`（`scripts/` 等不参与），pydoclint 只检查 `src`。
 - `make run` 前必须有可用的 provider 配置与 API Key（例如 `MCA_CONFIG=config/agent.yaml DEEPSEEK_API_KEY=... make run`）；
   否则启动校验失败：底层 `mca` 进程以 exit code 4 退出，`make` 自身则以 2 退出（目标失败）。以 `mca` 的退出码
   判断失败原因，这是预期行为。
 - `make check` 是每个模块的 Definition of Done 的第一条；失败时修代码，不要靠删测试或全局关闭规则来规避。
+- `make test-live` 只在显式提供 `MCA_LIVE_BASE_URL` / `MCA_LIVE_API_KEY` / `MCA_LIVE_MODEL` 后执行真实
+  调用；不要把密钥写进脚本、测试或 CI，也不要把它并入日常门禁。
+- `make demo-llm` 是 M1 的离线评审 demo：展示配置映射、脚本化流式输出与错误脱敏，不需要 API Key。
 - 首次使用、依赖变化或 `uv.lock` 更新后重新执行 `make setup`；bootstrap 是幂等的，失败会重试依赖同步。
 - 不要在 `make setup` 运行期间并行执行 `make check` 等目标（会争用同一个 `.venv`）。
 
@@ -167,7 +172,8 @@ def count_lines(path: Path) -> int:
   `skip-checking-private-functions = true`（私有函数只写摘要）。pydoclint 默认会读取当前目录 `pyproject.toml`
   的 `[tool.pydoclint]`；Makefile 仍显式传 `--config pyproject.toml`，保证从任意目录调用时使用同一份配置。
 - **pytest**：`minversion = 8.0`、`testpaths = ["tests"]`、`addopts = "-m 'not live'"`；`live` marker
-  在 `pyproject.toml` 中注册，代表"调用真实模型端点"的测试，默认不执行。
+  在 `pyproject.toml` 中注册，代表"调用真实模型端点"的测试，默认不执行。M1 起启用 pytest-asyncio
+  （`asyncio_mode = "strict"`，异步测试显式加 `@pytest.mark.asyncio`）。
 - 不新增全局忽略规则；确需局部豁免时在 `pyproject.toml` 的 per-file-ignores 中精确指定路径，并在评审包
   里说明原因。
 
@@ -207,8 +213,10 @@ def count_lines(path: Path) -> int:
   `config/agent.example.yaml` 与
   相关文档，并在当前模块的测试中覆盖默认值、合法值与非法值；否则示例配置会因未知键而启动失败。
 
-`provider` 与后续模块的关系：M0 只定义并校验配置；真正的 provider 实现由 M1 提供，`agent`、`tools`、
-`mcp` 等配置段分别由 M3、M2/M7、M8 消费。示例文件中出现这些键是 schema 要求，不代表对应能力已实现。
+`provider` 与后续模块的关系：M1 已实现 provider 层与启动期 provider 名称校验（未注册名称以退出码 4
+终止并列出可用名称）；TUI/headless 运行时仍为占位，`agent`、`tools`、`mcp` 等配置段分别由 M3、
+M2/M7、M8 消费。示例文件中出现这些键是 schema 要求，不代表对应能力已实现；provider 的配置映射与
+扩展契约见 `docs/providers.md`。
 
 ## 8. 密钥与敏感信息
 
@@ -222,8 +230,8 @@ def count_lines(path: Path) -> int:
 - 禁止把密钥写入日志、异常、事件、测试快照、commit message 或 README；禁止 `echo $DEEPSEEK_API_KEY`
   之类的调试命令留在脚本或文档中。
 - `.env`、`config/agent.yaml` 已被 gitignore；提交前用 `git status` / `git diff` 自查是否误带本地配置。
-- live 测试通过环境变量注入端点与密钥（M1 定义 `MCA_LIVE_*` 变量），默认不执行，也不要把密钥写进
-  测试代码或 CI 配置。
+- live 测试通过 `MCA_LIVE_BASE_URL` / `MCA_LIVE_API_KEY` / `MCA_LIVE_MODEL` 注入端点与密钥，默认不执行，
+  也不要把密钥写进测试代码或 CI 配置。
 
 ## 9. CLI 与退出码
 
@@ -241,15 +249,15 @@ def count_lines(path: Path) -> int:
 | `0` | 成功 | 正常退出；`--help` / `--version` 也算成功 |
 | `2` | 用法错误 | argparse 解析失败（未知参数、缺少 `run` 的任务参数等） |
 | `3` | 配置错误 | 配置文件不存在/不是文件/非法 YAML/不符合 schema（含未知键、越界值） |
-| `4` | 启动校验失败 | 工作区不存在/不是目录/不可写；`base_url`、`model` 或 API Key 缺失 |
+| `4` | 启动校验失败 | 工作区不存在/不是目录/不可写；`base_url`、`model` 或 API Key 缺失；`provider.name` 未注册 |
 
-错误与告警输出到 stderr（前缀 `error:` / `warning:`），正常结果输出到 stdout。M0 的 `run` 占位实现只会
-返回 `0` 或配置/启动错误码 `3` / `4`；headless 运行时失败、迭代上限等运行期退出码在 M3 定义，并与代码、
-测试一起补进本表。
+错误与告警输出到 stderr（前缀 `error:` / `warning:`），正常结果输出到 stdout。M1 的 `run`/无子命令占位
+实现返回 `0` 或配置/启动错误码 `3` / `4`（含未注册的 `provider.name`，stderr 会列出可用 provider）；
+headless 运行时失败、迭代上限等运行期退出码在 M3 定义，并与代码、测试一起补进本表。
 
 ## 10. 分支、提交与合并
 
-- 分支命名：`feat/mX-<topic>`，一个模块一条分支（当前 M0 为 `feat/m0-foundation`）；从最新的 `master`
+- 分支命名：`feat/mX-<topic>`，一个模块一条分支（当前 M1 为 `feat/m1-model-provider`，M0 已合并）；从最新的 `master`
   切出，Review 通过后合回 `master`。
 - 提交信息：英文 Conventional Commits，格式 `<type>(<module>): <subject>`，scope 用模块号。
   - 示例：`feat(m0): add layered configuration loader`、`test(m0): cover CLI exit codes`、
@@ -314,14 +322,16 @@ D17 记录模板（每模块一条，不超过 10 行，只写"为什么/取舍/
 | live（可选） | `pytest -m live` | M1 端点 smoke、M9 真实编码任务 E2E；无环境变量时自动 skip |
 
 - **默认测试必须离线**：不访问真实模型端点、不依赖网络、不依赖本机全局状态；外部交互用脚本化模型、
-  `tmp_path` 临时工作区与替身 MCP server。
-- live 测试用 `@pytest.mark.live` 标记，`pyproject.toml` 的 `addopts` 默认排除；M0 没有任何 live 测试，
-  `make test-live` 也尚未加入 Makefile。M1 起用 `.tools/uv run pytest -m live` 按需运行，且必须先设置
-  live 相关环境变量（M1 定义）。
+  `tmp_path` 临时工作区与替身 MCP server。M1 起异步测试用 pytest-asyncio（strict 模式，显式
+  `@pytest.mark.asyncio`）。
+- live 测试用 `@pytest.mark.live` 标记，`pyproject.toml` 的 `addopts` 默认排除；M1 起 live 测试位于
+  `tests/live/`，用 `make test-live` 按需运行，且必须先设置 `MCA_LIVE_BASE_URL` / `MCA_LIVE_API_KEY` /
+  `MCA_LIVE_MODEL`，缺失变量时自动 skip。
 - 测试独立可重复：不依赖执行顺序、不共享可变全局状态、不依赖当前工作目录；需要文件系统时一律用 `tmp_path`
   或 `tmp_path_factory`。
-- 命名与结构：M0 只有 `tests/unit/`；`tests/integration/`、`tests/ui/`、`tests/live/`、`tests/fixtures/`
-  随对应模块（M3/M5/M1/M8 等）加入。文件 `test_*.py`，函数 `test_<行为>`，断言说明失败时的可理解原因。
+- 命名与结构：M0 只有 `tests/unit/`；M1 增加 `tests/live/` 与 `tests/fixtures/`（可复用测试替身，
+  通过 `tests/conftest.py` 加入 `sys.path`）；`tests/integration/`、`tests/ui/` 随 M3/M5 加入。
+  文件 `test_*.py`，函数 `test_<行为>`，断言说明失败时的可理解原因。
 - 关键断言优先验证**事件序列与工作区副作用**（文件内容、退出码、输出文本），而不是内部实现细节。
 - M0 的测试必须覆盖：配置优先级、未知字段拒绝、密钥脱敏、CLI 参数与退出码 0/2/3/4、启动校验失败路径，
   以及"缺失 docstring 的样例能被质量门禁检出"。
@@ -346,6 +356,9 @@ D17 记录模板（每模块一条，不超过 10 行，只写"为什么/取舍/
 - **docstring 报 DOC101 / DOC201**：公开函数缺少 `Args:` 或 `Returns:` 说明，按第 5 节补全；一行摘要不会
   被豁免。**DOC301** 只在关闭 `allow-init-docstring` 时出现；本项目已开启该选项，构造参数写在
   `__init__` docstring 的 `Args:` 中即可，不要为此关闭检查。
+- **未知 provider 启动失败**：stderr 出现 `unknown model provider '<name>'; available providers: ...`
+  表示 `provider.name` 未注册；改成内置的 `openai-compatible`，或按 `docs/providers.md` 的扩展契约注册
+  新 provider。
 - **配置加载失败**：先用 `--config` 显式指定文件并检查 stderr 的 `configuration is invalid (<path>)` 与
   `- <field>: <reason>` 行；未知键通常是拼写错误或用了后续模块才出现的键。密钥相关失败检查
   `provider.api_key_env` 指向的变量是否已导出。

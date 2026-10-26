@@ -5,20 +5,24 @@
 # 使用步骤：
 #   1. 复制为本地配置：cp config/agent.example.yaml config/agent.yaml
 #   2. 导出模型密钥：export DEEPSEEK_API_KEY="<你的 API Key>"
-#   3. 启动（M0 阶段会完成配置加载与启动校验，然后打印占位提示）：
+#   3. 启动（M1 阶段会完成配置加载、启动校验与 provider 名称校验，然后打印占位提示）：
 #        MCA_CONFIG=config/agent.yaml make run
 #        .tools/uv run mca --config config/agent.yaml
+#   4. 离线体验模型接入层（不需要 API Key，不访问网络）：make demo-llm
+#   5. 可选 live smoke（需要真实端点与密钥）：MCA_LIVE_* 变量齐全时执行 make test-live
 #
 # 注意：
 #   - config/agent.yaml 已写入 .gitignore，本地密钥不会进入版本库；不要把真实密钥提交到仓库。
 #   - 配置是严格模式：只允许出现下面出现过的键，出现未知键会导致启动失败（退出码 3）。
-#   - 启动前会校验工作区存在且可写、provider 的 base_url / model / API Key 完整，失败时退出码 4。
+#   - 启动前会校验工作区存在且可写、provider 的 base_url / model / API Key 完整、provider.name 已注册，
+#     失败时退出码 4（未注册名称会列出可用 provider）。
 #   - 环境变量可覆盖配置（MCA_BASE_URL / MCA_API_KEY / MCA_MODEL / MCA_CONFIG / MCA_WORKSPACE），
 #     命令行参数 --config / --workspace 优先级最高，详见 docs/conventions.md 第 7 节。
 #     若同时设置了 MCA_API_KEY，它会优先于下面 provider.api_key_env 指向的变量（环境变量优先）。
 #
-# 当前模块边界：M0 只定义并校验配置结构；provider 实现在 M1，agent/tools/mcp 分别在 M3/M2/M8 消费，
-# 因此下面这些配置段在 M0 阶段只参与校验，不代表对应能力已经可用。
+# 当前模块边界（M1）：provider 段已在 M1 实现并会映射为 langchain-openai 的 ChatOpenAI（见
+# docs/providers.md）；TUI 与 headless 运行时仍为占位（M3/M5），agent/tools/mcp 配置段分别在 M3/M2/M8
+# 消费，因此这些段目前只参与校验，不代表对应能力已经可用。
 # =============================================================================
 
 # 模型端点配置（OpenAI 兼容协议）

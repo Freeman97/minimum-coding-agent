@@ -11,7 +11,8 @@
    Decision 与 D17 最近记录）及对应 capability 的 `specs/*/spec.md`；用 `openspec instructions apply`
    获取 change 上下文，不依赖历史聊天记录。
 2. 用 `git status`、`git log --oneline -10` 确认当前分支与未提交改动；只实现 `tasks.md` 中当前模块的
-   未完成项，不进入下一模块，不改后续模块的目录（`llm/`、`tools/`、`agent/`、`ui/` 等按模块顺序出现）。
+   未完成项，不进入下一模块，不改后续模块的目录（`tools/`、`agent/`、`ui/` 等按模块顺序出现；`llm/`
+   已在 M1 交付）。
 3. 一个模块一条分支 `feat/mX-<topic>`，从最新 `master` 切出；不要直接改 `master`。
 4. 提交信息用英文 Conventional Commits，scope 为模块号，例如 `feat(m0): add layered config loader`。
 
@@ -56,7 +57,7 @@
 ## 文档与交付
 
 - 代码行为变化同步更新文档与示例配置；文档中的命令必须可实际执行，不得描述尚未实现的能力（当前
-  Makefile 只有 `setup`、`check`、`lint`、`test`、`run`）。
+  Makefile 只有 `setup`、`check`、`lint`、`test`、`test-live`、`run`、`demo-llm`）。
 - 完成后运行 `make check`，输出评审包（改了什么/为什么、接口变化、运行方式、检查输出、限制与风险、
   建议 Review 重点），停下等待人工 Review；字段与模板见 `docs/conventions.md` 第 11 节。
 - Review 通过后，先把结论与偏差写回 `design.md` D17 和 `tasks.md`（行为契约变化更新 `specs/`，方案变化
