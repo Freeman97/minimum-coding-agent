@@ -9,7 +9,7 @@ export UV_CACHE_DIR := $(ROOT)/.uv-cache
 export UV_PYTHON_INSTALL_DIR := $(ROOT)/.uv-python
 export UV_PROJECT_ENVIRONMENT := $(ROOT)/.venv
 
-.PHONY: help setup check lint test run
+.PHONY: help setup check lint test test-live run demo-llm
 
 help:
 	@printf '%s\n' \
@@ -17,7 +17,9 @@ help:
 		'make check   Run ruff, pydoclint and the offline test suite' \
 		'make lint    Run ruff and pydoclint only' \
 		'make test    Run the offline test suite' \
-		'make run     Start the interactive console (placeholder until M5)'
+		'make test-live  Run the env-gated live model smoke tests (needs MCA_LIVE_*)' \
+		'make run     Start the interactive console (placeholder until M5)' \
+		'make demo-llm   Run the offline model access layer demo (no network)'
 
 setup:
 	@bash scripts/bootstrap.sh
@@ -33,6 +35,12 @@ lint: $(UV)
 
 test: $(UV)
 	$(UV) run pytest
+
+test-live: $(UV)
+	$(UV) run pytest -m live
+
+demo-llm: $(UV)
+	$(UV) run python scripts/demo_llm.py
 
 run: $(UV)
 	$(UV) run mca
