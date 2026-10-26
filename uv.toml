@@ -1,0 +1,3 @@
+# Keep uv's cache inside the project directory. The development sandbox only
+# allows writes below the project root, so a home-directory cache would fail.
+cache-dir = ".uv-cache"

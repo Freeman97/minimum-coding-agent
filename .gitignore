@@ -1,0 +1,26 @@
+# Project-local toolchain and virtual environment
+.venv/
+.tools/
+.uv-cache/
+.uv-python/
+
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Local configuration and secrets
+.env
+.env.*
+config/agent.yaml
+
+# Coverage and editor files
+.coverage
+htmlcov/
+.DS_Store

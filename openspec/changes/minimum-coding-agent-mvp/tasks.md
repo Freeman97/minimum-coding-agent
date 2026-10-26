@@ -2,13 +2,13 @@
 
 ## 1. M0 工程地基与配置
 
-- [ ] 1.1 创建 `pyproject.toml`、`uv.lock`（占位）、`src/` 布局、`.gitignore`、`scripts/bootstrap.sh` 与 `Makefile` 骨架；验证：在干净工作区执行 `make setup` 成功安装项目内 uv/Python 3.12/依赖，`uv run python -c "import minimum_coding_agent"` 通过
-- [ ] 1.2 实现 pydantic Settings 模型与分层加载（YAML > 默认值，环境变量与 CLI 覆盖），验证：配置优先级、未知字段、缺失必填项、密钥脱敏单测通过
-- [ ] 1.3 实现 CLI 骨架：默认入口（TUI 占位）、`run` 子命令占位、`--version`、`--help`、`--config/--workspace` 覆盖，验证：CLI 参数处理与退出码单测通过
-- [ ] 1.4 实现启动前校验（工作区存在且可写、模型端点配置完整）与可读错误输出，验证：非法工作区/缺失端点的启动失败单测通过
-- [ ] 1.5 配置 ruff（启用 `D` 规则并设为 Google convention）、pydoclint、pytest（默认排除 `live`）与 `make check`，验证：`make check` 全绿，且故意缺失 docstring 的样例能被检出并定位
-- [ ] 1.6 编写 `config/agent.example.yaml`（默认 DeepSeek 端点占位、无明文密钥）、`docs/conventions.md`（Google Style docstring/质量门禁/提交规范）、`AGENT.md` 骨架，验证：示例配置可被加载器解析，文档中的命令可执行
-- [ ] 1.7 输出 M0 评审包并暂停，等待人工 Review 确认；确认通过后，将评审结论与偏差写回 `design.md` D17、把新增工作补进 `tasks.md`，再勾选本任务
+- [x] 1.1 创建 `pyproject.toml`、`uv.lock`（占位）、`src/` 布局、`.gitignore`、`scripts/bootstrap.sh` 与 `Makefile` 骨架；验证：在干净工作区执行 `make setup` 成功安装项目内 uv/Python 3.12/依赖，`uv run python -c "import minimum_coding_agent"` 通过
+- [x] 1.2 实现 pydantic Settings 模型与分层加载（YAML > 默认值，环境变量与 CLI 覆盖），验证：配置优先级、未知字段、缺失必填项、密钥脱敏单测通过
+- [x] 1.3 实现 CLI 骨架：默认入口（TUI 占位）、`run` 子命令占位、`--version`、`--help`、`--config/--workspace` 覆盖，验证：CLI 参数处理与退出码单测通过
+- [x] 1.4 实现启动前校验（工作区存在且可写、模型端点配置完整）与可读错误输出，验证：非法工作区/缺失端点的启动失败单测通过
+- [x] 1.5 配置 ruff（启用 `D` 规则并设为 Google convention）、pydoclint、pytest（默认排除 `live`）与 `make check`，验证：`make check` 全绿，且故意缺失 docstring 的样例能被检出并定位
+- [x] 1.6 编写 `config/agent.example.yaml`（默认 DeepSeek 端点占位、无明文密钥）、`docs/conventions.md`（Google Style docstring/质量门禁/提交规范）、`AGENT.md` 骨架，验证：示例配置可被加载器解析，文档中的命令可执行
+- [x] 1.7 输出 M0 评审包并暂停，等待人工 Review 确认；确认通过后，将评审结论与偏差写回 `design.md` D17、把新增工作补进 `tasks.md`，再勾选本任务
 
 ## 2. M1 模型接入层
 

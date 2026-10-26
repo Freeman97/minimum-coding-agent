@@ -334,6 +334,17 @@ AgentError(message, where: Literal["model","tool","runtime"], retryable)
 - 归档后本节随 change 进入 archive；需要长期保留的内容在 M9 提炼到 README/docs。
 - 若某条交接信息会影响尚未开始的模块，必须**立即**更新该模块的 tasks 或 design 决策，不能只留在记录里。
 
+#### M0 工程地基与配置
+
+- 分支/提交：`feat/m0-foundation`，`7507237`..`2224153`（实现与评审前审计修复提交；D17/tasks 交接记录随后单独提交）
+- 交付范围：项目内 uv/CPython 3.12/依赖工具链；strict pydantic Settings 与分层加载（CLI > MCA_* env > YAML > 默认）；密钥脱敏与启动前校验；`mca` CLI 骨架（TUI/`run` 占位、`--version/--help/--config/--workspace`、退出码 0/2/3/4）；ruff(D+Google)+pydoclint+pytest 质量门禁；示例配置、`docs/conventions.md`、`AGENT.md`。
+- 与设计的偏差及原因：开发环境缺少 make 且 sudo 不可用，改用用户级 GNU make 4.3（不入库、不改系统目录）；uv installer 的 receipt 通过 `XDG_CONFIG_HOME` 落到 `.tools/config`，否则沙箱拒绝写 `~/.config`；网络实际可访问 astral.sh/PyPI，成功安装 uv 0.13.1 + CPython 3.12.15；代码保持 3.10 兼容基线（ruff `target-version="py310"`）以支持离线回退；design 中的 `app.py` composition root 按 M3/M5 任务延后，M0 不建空占位文件。
+- 评审前独立验证修复（行为契约变化）：环境变量只识别显式 `MCA_*`（移除 pydantic-settings；裸 `BASE_URL`/`MODEL`/`API_KEY`/`WORKSPACE`/`CONFIG` 不再生效，`load_settings(environ=...)` 与进程环境完全隔离）；空/空白密钥与 provider 字符串按非法配置拒绝；`redacted_dict()` 遮蔽 `mcp.servers[*].env` 值；回归测试与文档已同步。
+- 评审中定下的取舍：人工 Review 通过（2026-10-26）。确认保留显式 `MCA_*` 映射（移除 pydantic-settings）、空白凭证按非法/缺失处理、`redacted_dict()` 遮蔽 MCP env；接受 `uv.lock` 入库与 make 为环境前置条件；Review 未要求代码修改。
+- 评审结论：通过（2026-10-26），无新增任务；本记录写回后合并 `master` 并勾选 Review Gate，M0 关闭。
+- 对后续模块的影响/前置条件：M1 直接消费 `Settings.provider` 与退出码契约（0/2/3/4 为稳定契约）；`MCA_API_KEY` 覆盖 YAML `api_key_env` 的语义已固化并写入 conventions；配置 schema 已含 tools/mcp 段，M2/M3/M7/M8 只能增量加键并同步示例与测试；`make test-live`/`make demo` 分别在 M1/M3 加入。
+- 遗留问题/已知限制：make 需环境自备（本项目会话已用户级安装）；TUI/headless/模型/工具均为占位（对应 M1–M5）；DeepSeek 示例的 `base_url`/`model`/密钥变量名仍按 design Open Question 由用户最终确认；pydoclint 仅检查 `src` 且跳过私有函数。
+
 ## Risks / Trade-offs
 
 - [LangGraph/LangChain 1.x API 变动] → 锁定依赖主版本；显式图与 `astream` 用法用集成测试覆盖；避免依赖高阶封装。
