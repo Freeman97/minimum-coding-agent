@@ -1,0 +1,126 @@
+# =============================================================================
+# minimum-coding-agent 配置示例
+# =============================================================================
+#
+# 使用步骤：
+#   1. 复制为本地配置：cp config/agent.example.yaml config/agent.yaml
+#   2. 导出模型密钥：export DEEPSEEK_API_KEY="<你的 API Key>"
+#   3. 启动（M0 阶段会完成配置加载与启动校验，然后打印占位提示）：
+#        MCA_CONFIG=config/agent.yaml make run
+#        .tools/uv run mca --config config/agent.yaml
+#
+# 注意：
+#   - config/agent.yaml 已写入 .gitignore，本地密钥不会进入版本库；不要把真实密钥提交到仓库。
+#   - 配置是严格模式：只允许出现下面出现过的键，出现未知键会导致启动失败（退出码 3）。
+#   - 启动前会校验工作区存在且可写、provider 的 base_url / model / API Key 完整，失败时退出码 4。
+#   - 环境变量可覆盖配置（MCA_BASE_URL / MCA_API_KEY / MCA_MODEL / MCA_CONFIG / MCA_WORKSPACE），
+#     命令行参数 --config / --workspace 优先级最高，详见 docs/conventions.md 第 7 节。
+#     若同时设置了 MCA_API_KEY，它会优先于下面 provider.api_key_env 指向的变量（环境变量优先）。
+#
+# 当前模块边界：M0 只定义并校验配置结构；provider 实现在 M1，agent/tools/mcp 分别在 M3/M2/M8 消费，
+# 因此下面这些配置段在 M0 阶段只参与校验，不代表对应能力已经可用。
+# =============================================================================
+
+# 模型端点配置（OpenAI 兼容协议）
+provider:
+  # provider 名称；当前仅内置 openai-compatible
+  name: "openai-compatible"
+  # DeepSeek 的 OpenAI 兼容端点
+  base_url: "https://api.deepseek.com"
+  # 推荐写法：密钥从环境变量读取，配置文件本身不含明文
+  api_key_env: "DEEPSEEK_API_KEY"
+  # 不推荐但允许：直接写内联密钥（与 api_key_env 互斥，只能二选一，且启动时会打印告警）
+  # api_key: "<你的 API Key>"
+  # 模型名
+  model: "deepseek-chat"
+  # 采样温度，取值 0.0 ~ 2.0
+  temperature: 0.0
+  # 单次响应的最大 token 数，>= 1
+  max_tokens: 4096
+  # 单次请求超时（秒），> 0
+  timeout_seconds: 60.0
+
+# Agent 的工作区根目录；相对路径相对启动时的当前目录解析，启动前会校验存在且可写
+workspace: "."
+
+# 项目指令文件名；M6 起在新会话开始时从工作区根读取并注入系统提示
+instructions_file: "AGENT.md"
+
+# Agent 运行时配置
+agent:
+  # 单次任务 ReAct 循环的最大迭代次数，>= 1；达到上限会结束运行并说明原因
+  max_iterations: 30
+  # 会话上下文预算
+  context:
+    # 上下文预算（token），>= 1000
+    max_tokens: 64000
+    # LLM 摘要触发的软阈值（token），>= 1000
+    llm_summary_threshold_tokens: 48000
+    # 压缩器按列表顺序执行；具体名称在 M3 实现上下文管线时确定，M0 阶段保持为空
+    compressors: []
+
+# 内置工具集开关与限额；M0 只校验结构，工具在 M2（filesystem/editor/bash/todo）
+# 与 M7（search/code）接入
+tools:
+  # 文件系统工具集：目录树与文件匹配
+  filesystem:
+    enabled: true
+    # 目录递归深度，1 ~ 32
+    max_depth: 3
+    # 目录树最多返回的条目数
+    max_entries: 2000
+    # 跳过的目录名
+    exclude_dirs: [".git", ".venv", ".tools", ".uv-cache", ".uv-python", "node_modules", "__pycache__", "dist", "build"]
+  # 文本编辑器工具集：view / create / str_replace / insert
+  editor:
+    enabled: true
+  # Shell 命令工具集
+  bash:
+    enabled: true
+    # 命令超时（秒），> 0
+    timeout_seconds: 120.0
+    # 单次输出保留的最大字符数，>= 1000
+    max_output_chars: 20000
+    # 危险命令是否需要确认（headless 默认拒绝）
+    confirm_dangerous_commands: true
+  # 待办列表工具集
+  todo:
+    enabled: true
+  # 文本检索工具集
+  search:
+    enabled: true
+    # 单次检索返回的最大结果数，1 ~ 1000
+    max_results: 50
+    # 单文件最大读取大小（KB），超过则跳过
+    max_file_size_kb: 1024
+    # 跳过的目录名
+    exclude_dirs: [".git", ".venv", ".tools", ".uv-cache", ".uv-python", "node_modules", "__pycache__", "dist", "build"]
+  # 代码定位工具集（M7）：outline / find_definition / find_references
+  code:
+    enabled: true
+
+# MCP 服务器列表；M0 只校验结构，M8 起接入 stdio 传输
+mcp:
+  servers: []
+  # 单个 MCP 服务器的写法（M8 实现后可用；取消注释并放到 servers 列表下）：
+  # - name: "echo"
+  #   transport: "stdio"
+  #   command: "python"
+  #   args: ["tests/fixtures/mcp_echo_server.py"]
+  #   env: {}
+  #   enabled: true
+
+# =============================================================================
+# 本地 Ollama 端点示例（OpenAI 兼容）
+#
+# 取消注释后整体替换上方的 provider 段即可切换，其余配置保持不变。
+# Ollama 不校验密钥，下面 api_key 只是为通过启动校验的占位值；
+# 使用内联 api_key 会触发启动告警，也可改用 api_key_env 指向任意已导出的变量。
+# =============================================================================
+# provider:
+#   name: "openai-compatible"
+#   base_url: "http://localhost:11434/v1"
+#   api_key: "ollama"
+#   model: "qwen2.5-coder:7b"
+#   temperature: 0.0
+#   timeout_seconds: 120.0
