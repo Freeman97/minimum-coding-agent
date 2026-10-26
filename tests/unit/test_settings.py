@@ -91,6 +91,47 @@ def test_redacted_dict_keeps_absent_secret_as_none() -> None:
     assert settings.redacted_dict()["provider"]["api_key"] is None
 
 
+def test_blank_inline_api_key_is_rejected() -> None:
+    with pytest.raises(ValidationError, match="must not be blank"):
+        Settings.model_validate({"provider": {"api_key": "   "}})
+
+
+@pytest.mark.parametrize("field", ["base_url", "api_key_env", "model"])
+def test_blank_provider_strings_are_rejected(field: str) -> None:
+    with pytest.raises(ValidationError, match="must not be blank"):
+        Settings.model_validate({"provider": {field: "   "}})
+
+
+def test_blank_instructions_file_is_rejected() -> None:
+    with pytest.raises(ValidationError, match="must not be blank"):
+        Settings.model_validate({"instructions_file": "   "})
+
+
+def test_whitespace_environment_api_key_is_treated_as_missing() -> None:
+    settings = Settings.model_validate({"provider": {"api_key_env": "TEAM_API_KEY"}})
+    assert settings.provider.resolved_api_key({"TEAM_API_KEY": "   "}) is None
+
+
+def test_redacted_dict_masks_mcp_server_environment_values() -> None:
+    settings = Settings.model_validate(
+        {
+            "mcp": {
+                "servers": [
+                    {
+                        "name": "echo",
+                        "env": {"SERVICE_TOKEN": "mcp-secret", "LOG_LEVEL": "debug"},
+                    }
+                ]
+            }
+        }
+    )
+    redacted = settings.redacted_dict()
+    server_env = redacted["mcp"]["servers"][0]["env"]
+    assert server_env["SERVICE_TOKEN"] == REDACTED
+    assert server_env["LOG_LEVEL"] == REDACTED
+    assert "mcp-secret" not in json.dumps(redacted)
+
+
 def test_resolved_api_key_prefers_inline_secret() -> None:
     settings = Settings.model_validate({"provider": {"api_key": "sk-inline"}})
     assert settings.provider.resolved_api_key({"OTHER": "value"}) == "sk-inline"

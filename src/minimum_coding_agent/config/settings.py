@@ -12,7 +12,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
 
 #: Placeholder used instead of secret values in logs and error reports.
 REDACTED = "***REDACTED***"
@@ -49,18 +49,41 @@ class ProviderSettings(SettingsModel):
     max_tokens: int | None = Field(default=None, ge=1)
     timeout_seconds: float = Field(default=60.0, gt=0.0)
 
+    @field_validator("base_url", "api_key_env", "model")
+    @classmethod
+    def _reject_blank_strings(cls, value: str | None) -> str | None:
+        """Reject empty or whitespace-only provider strings.
+
+        Args:
+            value: Candidate field value.
+
+        Returns:
+            The unchanged value when it is not blank.
+
+        Raises:
+            ValueError: If the value consists only of whitespace.
+        """
+        if value is not None and not value.strip():
+            msg = "value must not be blank"
+            raise ValueError(msg)
+        return value
+
     @model_validator(mode="after")
     def _validate_credentials(self) -> ProviderSettings:
-        """Reject configurations that mix inline and environment credentials.
+        """Reject invalid or ambiguous provider credentials.
 
         Returns:
             The validated provider settings.
 
         Raises:
-            ValueError: If both ``api_key`` and ``api_key_env`` are configured.
+            ValueError: If both ``api_key`` and ``api_key_env`` are configured,
+                or if the inline ``api_key`` is blank.
         """
         if self.api_key is not None and self.api_key_env is not None:
             msg = "provider.api_key and provider.api_key_env are mutually exclusive"
+            raise ValueError(msg)
+        if self.api_key is not None and not self.api_key.get_secret_value().strip():
+            msg = "provider.api_key must not be blank"
             raise ValueError(msg)
         return self
 
@@ -78,7 +101,8 @@ class ProviderSettings(SettingsModel):
         if self.api_key_env is None:
             return None
         environment = os.environ if environ is None else environ
-        return environment.get(self.api_key_env) or None
+        value = environment.get(self.api_key_env)
+        return value.strip() or None if value is not None else None
 
     def inline_secret_is_used(self) -> bool:
         """Report whether the inline ``api_key`` is configured.
@@ -187,8 +211,30 @@ class Settings(SettingsModel):
     tools: ToolsSettings = Field(default_factory=ToolsSettings)
     mcp: McpSettings = Field(default_factory=McpSettings)
 
+    @field_validator("instructions_file")
+    @classmethod
+    def _reject_blank_instructions_file(cls, value: str) -> str:
+        """Reject an empty or whitespace-only instructions file name.
+
+        Args:
+            value: Candidate instructions file name.
+
+        Returns:
+            The unchanged file name when it is not blank.
+
+        Raises:
+            ValueError: If the value consists only of whitespace.
+        """
+        if not value.strip():
+            msg = "value must not be blank"
+            raise ValueError(msg)
+        return value
+
     def redacted_dict(self) -> dict[str, Any]:
         """Return a JSON-compatible copy of the settings with secrets masked.
+
+        Alongside ``provider.api_key``, the ``env`` values of configured MCP
+        servers are masked because they commonly carry connection secrets.
 
         Returns:
             A mapping that is safe to print in logs and error messages.
@@ -197,4 +243,11 @@ class Settings(SettingsModel):
         provider = data.get("provider")
         if isinstance(provider, dict) and self.provider.api_key is not None:
             provider["api_key"] = REDACTED
+        mcp = data.get("mcp")
+        if isinstance(mcp, dict):
+            servers = mcp.get("servers")
+            if isinstance(servers, list):
+                for server in servers:
+                    if isinstance(server, dict) and isinstance(server.get("env"), dict):
+                        server["env"] = dict.fromkeys(server["env"], REDACTED)
         return data
