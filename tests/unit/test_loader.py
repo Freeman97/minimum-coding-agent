@@ -122,6 +122,43 @@ def test_cli_config_path_beats_environment(tmp_path: Path) -> None:
     assert settings.provider.model == "from-cli"
 
 
+def test_bare_environment_variable_names_are_ignored(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    settings = load_settings(
+        environ={
+            "BASE_URL": "https://bare.example.com",
+            "MODEL": "bare-model",
+            "API_KEY": "sk-bare",
+            "WORKSPACE": str(tmp_path / "bare-workspace"),
+            "CONFIG": str(tmp_path / "missing.yaml"),
+        }
+    )
+    assert settings.provider.base_url is None
+    assert settings.provider.model is None
+    assert settings.provider.api_key is None
+    assert settings.workspace == tmp_path.resolve()
+
+
+def test_environ_injection_is_isolated_from_ambient_environment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("BASE_URL", "https://ambient.example.com")
+    monkeypatch.setenv("MODEL", "ambient-model")
+    monkeypatch.setenv("API_KEY", "sk-ambient")
+    monkeypatch.setenv("WORKSPACE", str(tmp_path / "ambient-workspace"))
+    monkeypatch.setenv("CONFIG", str(tmp_path / "missing.yaml"))
+
+    settings = load_settings(environ={})
+
+    assert settings.provider.base_url is None
+    assert settings.provider.model is None
+    assert settings.provider.api_key is None
+    assert settings.workspace == tmp_path.resolve()
+
+
 def test_environment_api_key_overrides_file_api_key_env(tmp_path: Path) -> None:
     path = write_config(
         tmp_path,

@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import Field, SecretStr, ValidationError
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import BaseModel, ConfigDict, SecretStr, ValidationError
 
 from minimum_coding_agent.config.settings import Settings
 
@@ -45,24 +45,23 @@ class ConfigLoadError(Exception):
         self.message = message
 
 
-class _EnvironmentSettings(BaseSettings):
+class _EnvironmentSettings(BaseModel):
     """Explicit ``MCA_*`` environment overrides.
 
-    The mapping is deliberately explicit: nested configuration is not derived
-    from environment variable names, which keeps override behavior predictable.
+    The mapping is deliberately explicit and self-contained: only the five
+    documented ``MCA_*`` variables are read, and no other environment variable
+    (for example a bare ``MODEL`` or ``WORKSPACE``) can leak into the settings.
+    This keeps the loader hermetic and the test suite independent of ambient
+    shell or CI variables.
     """
 
-    model_config = SettingsConfigDict(
-        extra="ignore",
-        hide_input_in_errors=True,
-        populate_by_name=True,
-    )
+    model_config = ConfigDict(extra="ignore", hide_input_in_errors=True)
 
-    base_url: str | None = Field(default=None, validation_alias=ENV_BASE_URL)
-    api_key: SecretStr | None = Field(default=None, validation_alias=ENV_API_KEY)
-    model: str | None = Field(default=None, validation_alias=ENV_MODEL)
-    config: Path | None = Field(default=None, validation_alias=ENV_CONFIG)
-    workspace: Path | None = Field(default=None, validation_alias=ENV_WORKSPACE)
+    base_url: str | None = None
+    api_key: SecretStr | None = None
+    model: str | None = None
+    config: Path | None = None
+    workspace: Path | None = None
 
     @classmethod
     def from_environ(cls, environ: Mapping[str, str] | None = None) -> _EnvironmentSettings:
@@ -74,11 +73,10 @@ class _EnvironmentSettings(BaseSettings):
         Returns:
             The parsed environment overrides.
         """
-        if environ is None:
-            return cls()
+        source = os.environ if environ is None else environ
         values: dict[str, str] = {}
         for env_name, field_name in _ENV_TO_FIELD.items():
-            value = environ.get(env_name)
+            value = source.get(env_name)
             if value:
                 values[field_name] = value
         return cls.model_validate(values)

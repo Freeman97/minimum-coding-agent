@@ -151,6 +151,19 @@ def test_config_from_environment(
     assert "warning:" not in captured.err
 
 
+def test_bare_environment_variables_do_not_satisfy_startup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("BASE_URL", "https://bare.example.com")
+    monkeypatch.setenv("MODEL", "bare-model")
+    monkeypatch.setenv("API_KEY", "sk-bare")
+    code = main(["--workspace", str(tmp_path)])
+    assert code == int(ExitCode.STARTUP_ERROR)
+    error = capsys.readouterr().err
+    assert "provider.base_url" in error
+    assert "bare-model" not in error
+
+
 def test_inline_api_key_warns(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
