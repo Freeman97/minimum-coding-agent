@@ -11,6 +11,7 @@ readme = "README.md"
 # to the system Python 3.10 when 3.12 cannot be installed offline.
 requires-python = ">=3.10"
 dependencies = [
+    "langchain-openai>=1.7.2,<2",
     "pydantic>=2.10,<3",
     "pyyaml>=6.0.2,<7",
 ]
@@ -22,6 +23,7 @@ mca = "minimum_coding_agent.cli:main"
 dev = [
     "pydoclint>=0.6,<1",
     "pytest>=8.3,<10",
+    "pytest-asyncio>=1.4.1,<2",
     "ruff>=0.8,<1",
 ]
 
@@ -35,6 +37,8 @@ packages = ["src/minimum_coding_agent"]
 minversion = "8.0"
 testpaths = ["tests"]
 addopts = "-m 'not live'"
+asyncio_mode = "strict"
+asyncio_default_fixture_loop_scope = "function"
 markers = [
     "live: tests that call a real model endpoint (opt-in, excluded by default)",
 ]
