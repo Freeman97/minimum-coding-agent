@@ -12,12 +12,12 @@
 
 ## 2. M1 模型接入层
 
-- [ ] 2.1 定义 `ChatModelProvider` 协议与 `ProviderRegistry`，验证：注册、重复注册、未知 provider 错误的单测通过
-- [ ] 2.2 实现 OpenAI 兼容 provider（`base_url`/`api_key_env`/`model`/`temperature`/`max_tokens`/`timeout`）与配置映射，验证：配置到 `ChatOpenAI` 参数映射单测通过
-- [ ] 2.3 实现 `ScriptedChatModel` 测试替身（流式片段 + `tool_calls`），验证：流式片段顺序、最终消息、工具调用脚本的单测通过
-- [ ] 2.4 实现流式调用封装与错误分类（认证失败/超时/5xx/不可解析响应），验证：模拟异常的单测通过，错误文本不含密钥
-- [ ] 2.5 添加 env-gated live smoke 测试（`pytest -m live`），验证：无 `MCA_LIVE_*` 时自动 skip；提供端点后可真实调用并断言收到流式输出
-- [ ] 2.6 编写 provider 扩展文档与契约样例（含一个测试用 provider），验证：文档示例的注册方式在测试中可复用
+- [x] 2.1 定义 `ChatModelProvider` 协议与 `ProviderRegistry`，验证：注册、重复注册、未知 provider 错误的单测通过
+- [x] 2.2 实现 OpenAI 兼容 provider（`base_url`/`api_key_env`/`model`/`temperature`/`max_tokens`/`timeout`）与配置映射，验证：配置到 `ChatOpenAI` 参数映射单测通过
+- [x] 2.3 实现 `ScriptedChatModel` 测试替身（流式片段 + `tool_calls`），验证：流式片段顺序、最终消息、工具调用脚本的单测通过
+- [x] 2.4 实现流式调用封装与错误分类（认证失败/超时/5xx/不可解析响应），验证：模拟异常的单测通过，错误文本不含密钥
+- [x] 2.5 添加 env-gated live smoke 测试（`pytest -m live`），验证：无 `MCA_LIVE_*` 时自动 skip；提供端点后可真实调用并断言收到流式输出
+- [x] 2.6 编写 provider 扩展文档与契约样例（含一个测试用 provider），验证：文档示例的注册方式在测试中可复用
 - [ ] 2.7 输出 M1 评审包并暂停，等待人工 Review 确认；确认通过后，将评审结论与偏差写回 `design.md` D17、把新增工作补进 `tasks.md`，再勾选本任务
 
 ## 3. M2 工具系统与基础工具

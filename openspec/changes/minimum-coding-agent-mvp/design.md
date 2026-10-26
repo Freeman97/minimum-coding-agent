@@ -345,6 +345,16 @@ AgentError(message, where: Literal["model","tool","runtime"], retryable)
 - 对后续模块的影响/前置条件：M1 直接消费 `Settings.provider` 与退出码契约（0/2/3/4 为稳定契约）；`MCA_API_KEY` 覆盖 YAML `api_key_env` 的语义已固化并写入 conventions；配置 schema 已含 tools/mcp 段，M2/M3/M7/M8 只能增量加键并同步示例与测试；`make test-live`/`make demo` 分别在 M1/M3 加入。
 - 遗留问题/已知限制：make 需环境自备（本项目会话已用户级安装）；TUI/headless/模型/工具均为占位（对应 M1–M5）；DeepSeek 示例的 `base_url`/`model`/密钥变量名仍按 design Open Question 由用户最终确认；pydoclint 仅检查 `src` 且跳过私有函数。
 
+#### M1 模型接入层
+
+- 分支/提交：`feat/m1-model-provider`，`7d1943c`..`be06a4c`（依赖/实现/测试/构建/文档提交；D17/tasks 交接记录随后单独提交）
+- 交付范围：`ChatModelProvider` 协议与 `ProviderRegistry`（契约校验、重名拒绝、未知 provider 报错并列出可用名）；`OpenAICompatibleProvider`（配置 → `ChatOpenAI`，依赖 `langchain-openai 1.7.2` / `langchain-core 1.7.0`）；`stream_chat` 流式封装（`TextDelta`/`MessageComplete`，中断时保留 `partial_text`）；错误分类与密钥脱敏（认证/超时/网络/5xx/限流/非法请求/不可解析/未知）；`ScriptedChatModel` 测试替身（流式片段 + `tool_calls` + `bind_tools`）；CLI 启动期 provider 名称校验（未注册 → exit 4 并列出可用名）；`make test-live`、`make demo-llm`、`docs/providers.md` 与 2 个 live smoke。
+- 与设计的偏差及原因：D1 的 `llm/{base,registry,openai_compatible}.py` 之外增加 `defaults.py`（默认注册表 + `create_chat_model` 装配入口）、`streaming.py`、`errors.py`、`scripted.py`、`__init__.py`，因为 M1 任务显式要求流式封装与脚本化模型；`app.py` composition root 仍按 M3 延后，M1 暂由 CLI 完成 provider 名称校验、`llm/defaults.py` 作为临时装配点（M3 迁入 `app.py` 后删除 CLI 校验）；开发依赖增加 `pytest-asyncio` 1.4.1（strict 模式）以测试异步流式调用。
+- 评审中定下的取舍：待人工 Review 后补充。
+- 实现层已定取舍：`ChatOpenAI` 固定 `max_retries=0`，超时/错误按配置时间暴露，重试策略留给运行时/用户；`ScriptedChatModel` 只实现异步流式（M3 运行时为异步），`bind_tools` 返回自身；空流判断兼容 LangChain 零片段 `ValueError` 哨兵（非哨兵 `ValueError` 仍归 UNKNOWN）。
+- 对后续模块的影响/前置条件：M3 用 `create_chat_model(settings)` 取模型、`model.bind_tools(...)` 后交给 `stream_chat()`，从 `MessageComplete.message.tool_calls` 驱动 ReAct 循环；未注册 provider 的 exit 4 已加入 conventions 退出码表（稳定契约）；M3/M4 集成测试用 `ScriptedChatModel(turns/repeat_last/seen_messages)`；新增 provider 必须同步 `docs/providers.md` 契约与 `tests/unit/test_provider_contract.py`。
+- 遗留问题/已知限制：本会话未提供 `MCA_LIVE_*` 端点，live smoke 仅验证了缺失变量时自动 skip，真实调用留待用户按 `docs/providers.md` 执行；错误分类对 LangChain 空流哨兵字符串有耦合（有 UNKNOWN 安全回退）；未实现 Anthropic 等其它 provider（只有契约与样例）；M1 的 CLI/TUI/headless 仍为占位。
+
 ## Risks / Trade-offs
 
 - [LangGraph/LangChain 1.x API 变动] → 锁定依赖主版本；显式图与 `astream` 用法用集成测试覆盖；避免依赖高阶封装。
