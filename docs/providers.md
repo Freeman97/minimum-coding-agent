@@ -196,6 +196,10 @@ make test-live
 
 - 三个变量任一缺失时，live 测试自动 skip；提供后断言真实端点返回流式输出，并验证
   `tool_calls`（端点需支持 OpenAI function calling，DeepSeek 等主流端点支持）；
+- **事件循环约束**：`langchain-openai 1.7.2` 在进程内用 `lru_cache` 缓存默认 `httpx.AsyncClient`，
+  该 client 不能跨事件循环复用；`tests/live/` 的测试因此用
+  `@pytest.mark.asyncio(loop_scope="session")` 共享一个 session 级事件循环。新增 live 测试时沿用该写法
+  （或共用同一 model/client），否则第二个测试会报 `RuntimeError: Event loop is closed`；
 - live 测试不进入日常质量门禁，也不要在 CI 中保存真实密钥。
 
 ## 8. 模块 demo（离线）

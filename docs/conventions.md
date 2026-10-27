@@ -327,6 +327,9 @@ D17 记录模板（每模块一条，不超过 10 行，只写"为什么/取舍/
 - live 测试用 `@pytest.mark.live` 标记，`pyproject.toml` 的 `addopts` 默认排除；M1 起 live 测试位于
   `tests/live/`，用 `make test-live` 按需运行，且必须先设置 `MCA_LIVE_BASE_URL` / `MCA_LIVE_API_KEY` /
   `MCA_LIVE_MODEL`，缺失变量时自动 skip。
+- live 测试模块共享一个 session 级事件循环（`@pytest.mark.asyncio(loop_scope="session")`）：
+  `langchain-openai` 在进程内缓存默认 `httpx.AsyncClient`，跨事件循环复用会报
+  `RuntimeError: Event loop is closed`；新增真实端点测试沿用该写法。
 - 测试独立可重复：不依赖执行顺序、不共享可变全局状态、不依赖当前工作目录；需要文件系统时一律用 `tmp_path`
   或 `tmp_path_factory`。
 - 命名与结构：M0 只有 `tests/unit/`；M1 增加 `tests/live/` 与 `tests/fixtures/`（可复用测试替身，

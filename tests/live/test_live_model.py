@@ -3,6 +3,12 @@
 These tests call a real OpenAI-compatible endpoint and are excluded from the
 default quality gate. Run them explicitly with ``make test-live`` after setting
 ``MCA_LIVE_BASE_URL``, ``MCA_LIVE_API_KEY`` and ``MCA_LIVE_MODEL``.
+
+All tests in this module share one session-scoped event loop on purpose:
+``langchain-openai`` caches its default ``httpx.AsyncClient`` process-wide via
+``lru_cache``, so a client created in one event loop must not be reused from a
+new one. With pytest-asyncio's default per-test loop, the second test would
+reuse the cached client and fail with ``RuntimeError: Event loop is closed``.
 """
 
 from __future__ import annotations
@@ -52,7 +58,7 @@ def live_model() -> tuple[BaseChatModel, ProviderSettings]:
     return model, settings
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio(loop_scope="session")
 async def test_live_streaming_smoke() -> None:
     model, _ = live_model()
 
@@ -87,7 +93,7 @@ def echo_text(text: str) -> str:
     return text
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio(loop_scope="session")
 async def test_live_tool_calling_smoke() -> None:
     model, _ = live_model()
     bound_model = model.bind_tools([echo_text])
