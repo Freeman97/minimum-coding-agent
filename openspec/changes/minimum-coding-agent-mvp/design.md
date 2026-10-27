@@ -347,13 +347,14 @@ AgentError(message, where: Literal["model","tool","runtime"], retryable)
 
 #### M1 模型接入层
 
-- 分支/提交：`feat/m1-model-provider`，`7d1943c`..`be06a4c`（依赖/实现/测试/构建/文档提交；D17/tasks 交接记录随后单独提交）
+- 分支/提交：`feat/m1-model-provider`，`7d1943c`..`0d3544e`（依赖/实现/测试/构建/文档提交 + 评审迭代修复；D17/tasks 交接记录随后单独提交）
 - 交付范围：`ChatModelProvider` 协议与 `ProviderRegistry`（契约校验、重名拒绝、未知 provider 报错并列出可用名）；`OpenAICompatibleProvider`（配置 → `ChatOpenAI`，依赖 `langchain-openai 1.7.2` / `langchain-core 1.7.0`）；`stream_chat` 流式封装（`TextDelta`/`MessageComplete`，中断时保留 `partial_text`）；错误分类与密钥脱敏（认证/超时/网络/5xx/限流/非法请求/不可解析/未知）；`ScriptedChatModel` 测试替身（流式片段 + `tool_calls` + `bind_tools`）；CLI 启动期 provider 名称校验（未注册 → exit 4 并列出可用名）；`make test-live`、`make demo-llm`、`docs/providers.md` 与 2 个 live smoke。
 - 与设计的偏差及原因：D1 的 `llm/{base,registry,openai_compatible}.py` 之外增加 `defaults.py`（默认注册表 + `create_chat_model` 装配入口）、`streaming.py`、`errors.py`、`scripted.py`、`__init__.py`，因为 M1 任务显式要求流式封装与脚本化模型；`app.py` composition root 仍按 M3 延后，M1 暂由 CLI 完成 provider 名称校验、`llm/defaults.py` 作为临时装配点（M3 迁入 `app.py` 后删除 CLI 校验）；开发依赖增加 `pytest-asyncio` 1.4.1（strict 模式）以测试异步流式调用。
 - 评审中定下的取舍：待人工 Review 后补充。
 - 实现层已定取舍：`ChatOpenAI` 固定 `max_retries=0`，超时/错误按配置时间暴露，重试策略留给运行时/用户；`ScriptedChatModel` 只实现异步流式（M3 运行时为异步），`bind_tools` 返回自身；空流判断兼容 LangChain 零片段 `ValueError` 哨兵（非哨兵 `ValueError` 仍归 UNKNOWN）。
-- 对后续模块的影响/前置条件：M3 用 `create_chat_model(settings)` 取模型、`model.bind_tools(...)` 后交给 `stream_chat()`，从 `MessageComplete.message.tool_calls` 驱动 ReAct 循环；未注册 provider 的 exit 4 已加入 conventions 退出码表（稳定契约）；M3/M4 集成测试用 `ScriptedChatModel(turns/repeat_last/seen_messages)`；新增 provider 必须同步 `docs/providers.md` 契约与 `tests/unit/test_provider_contract.py`。
-- 遗留问题/已知限制：本会话未提供 `MCA_LIVE_*` 端点，live smoke 仅验证了缺失变量时自动 skip，真实调用留待用户按 `docs/providers.md` 执行；错误分类对 LangChain 空流哨兵字符串有耦合（有 UNKNOWN 安全回退）；未实现 Anthropic 等其它 provider（只有契约与样例）；M1 的 CLI/TUI/headless 仍为占位。
+- 评审迭代修复（2026-10-27，真实端点 live smoke）：用户注入 `MCA_LIVE_*` 后 `make test-live` 失败——两个 live 测试各自使用 pytest-asyncio 的 function 级事件循环，而 `langchain-openai 1.7.2` 在进程内用 `lru_cache` 缓存默认 `httpx.AsyncClient`，第二个测试复用了第一个（已关闭）循环里的 client，报 `RuntimeError: Event loop is closed`（被 `stream_chat` 归类为 UNKNOWN `ModelCallError`）。对照实验确认：同循环多次调用正常、不同 cache key 或逐循环清缓存正常，故非 provider/错误分类缺陷；修复为 live 测试统一 `@pytest.mark.asyncio(loop_scope="session")` 共享一个 session 级事件循环，并在 `docs/providers.md`/`docs/conventions.md` 记录该约束。用 DeepSeek 真实端点验证 `make test-live` 连续 3 次 2 passed，离线 `make check` 仍 160 passed；生产代码无需修改（运行时单事件循环）。
+- 对后续模块的影响/前置条件：M3 用 `create_chat_model(settings)` 取模型、`model.bind_tools(...)` 后交给 `stream_chat()`，从 `MessageComplete.message.tool_calls` 驱动 ReAct 循环；未注册 provider 的 exit 4 已加入 conventions 退出码表（稳定契约）；M3/M4 集成测试用 `ScriptedChatModel(turns/repeat_last/seen_messages)`；新增 provider 必须同步 `docs/providers.md` 契约与 `tests/unit/test_provider_contract.py`；M9 live e2e 若使用真实 HTTP 模型，必须沿用 live 测试的 session 事件循环（或跨测试共享同一 client），否则会复现 `Event loop is closed`。
+- 遗留问题/已知限制：live smoke 已用 DeepSeek 真实端点验证通过（`make test-live` 连续 3 次 2 passed），但需要用户自备 `MCA_LIVE_*` 且不属于 CI 门禁；错误分类对 LangChain 空流哨兵字符串有耦合（有 UNKNOWN 安全回退）；未实现 Anthropic 等其它 provider（只有契约与样例）；M1 的 CLI/TUI/headless 仍为占位。
 
 ## Risks / Trade-offs
 
