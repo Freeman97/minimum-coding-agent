@@ -17,7 +17,7 @@ help:
 		'make check   Run ruff, pydoclint and the offline test suite' \
 		'make lint    Run ruff and pydoclint only' \
 		'make test    Run the offline test suite' \
-		'make test-live  Run the env-gated live model smoke tests (needs MCA_LIVE_*)' \
+		'make test-live  Run live model smoke tests and echo the stream (needs MCA_LIVE_*)' \
 		'make run     Start the interactive console (placeholder until M5)' \
 		'make demo-llm   Run the offline model access layer demo (no network)'
 
@@ -37,7 +37,7 @@ test: $(UV)
 	$(UV) run pytest
 
 test-live: $(UV)
-	$(UV) run pytest -m live
+	$(UV) run pytest -m live -s
 
 demo-llm: $(UV)
 	$(UV) run python scripts/demo_llm.py

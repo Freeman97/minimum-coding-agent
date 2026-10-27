@@ -4,6 +4,9 @@ These tests call a real OpenAI-compatible endpoint and are excluded from the
 default quality gate. Run them explicitly with ``make test-live`` after setting
 ``MCA_LIVE_BASE_URL``, ``MCA_LIVE_API_KEY`` and ``MCA_LIVE_MODEL``.
 
+``make test-live`` runs pytest with ``-s`` so the streamed assistant text is echoed
+to the terminal for manual inspection; the assertions above remain the real check.
+
 All tests in this module share one session-scoped event loop on purpose:
 ``langchain-openai`` caches its default ``httpx.AsyncClient`` process-wide via
 ``lru_cache``, so a client created in one event loop must not be reused from a
@@ -64,20 +67,24 @@ async def test_live_streaming_smoke() -> None:
 
     deltas: list[str] = []
     final = None
+    print("\n[live] assistant stream: ", end="", flush=True)
     async for event in stream_chat(
         model,
         [HumanMessage(content="Reply with exactly one short sentence: pong.")],
     ):
         if isinstance(event, TextDelta):
             deltas.append(event.text)
+            print(event.text, end="", flush=True)
         else:
             assert isinstance(event, MessageComplete)
             final = event.message
+    print(flush=True)
 
     assert deltas, "expected incremental output from the live endpoint"
     assert final is not None
     assert isinstance(final.content, str)
     assert final.content.strip()
+    print(f"[live] stream complete: {len(deltas)} fragments, {len(''.join(deltas))} chars")
 
 
 @tool
@@ -110,3 +117,4 @@ async def test_live_tool_calling_smoke() -> None:
     assert final.tool_calls, "the live endpoint did not return a tool call"
     assert final.tool_calls[0]["name"] == "echo_text"
     assert final.tool_calls[0]["args"].get("text") == "ping"
+    print(f"[live] tool calls: {[(call['name'], call['args']) for call in final.tool_calls]}")

@@ -92,7 +92,7 @@ minimum-coding-agent/
 | `make setup` | `bash scripts/bootstrap.sh` | 安装项目内 uv、Python 解释器与锁定依赖，并验证 `import minimum_coding_agent` |
 | `make lint` | `.tools/uv run ruff check src tests`；`.tools/uv run pydoclint --config pyproject.toml src` | 静态检查 + Google Style docstring 校验 |
 | `make test` | `.tools/uv run pytest` | 离线测试（`addopts = -m 'not live'` 自动排除 live） |
-| `make test-live` | `.tools/uv run pytest -m live` | live 模型 smoke；需 `MCA_LIVE_*` 变量，缺失时自动 skip |
+| `make test-live` | `.tools/uv run pytest -m live -s` | live 模型 smoke，流式响应会实时打到终端；需 `MCA_LIVE_*` 变量，缺失时自动 skip |
 | `make check` | `lint` + `test` | 质量门禁，提交与评审前必须全绿 |
 | `make run` | `.tools/uv run mca` | 启动交互控制台；M5 前只打印占位提示并退出 |
 | `make demo-llm` | `.tools/uv run python scripts/demo_llm.py` | M1 模型接入层离线 demo（不访问网络） |

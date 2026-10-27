@@ -196,6 +196,8 @@ make test-live
 
 - 三个变量任一缺失时，live 测试自动 skip；提供后断言真实端点返回流式输出，并验证
   `tool_calls`（端点需支持 OpenAI function calling，DeepSeek 等主流端点支持）；
+- **终端可见性**：`make test-live` 以 `-s` 运行，live 测试会把模型流式响应实时打印到终端，便于目视确认；
+  直接运行 `.tools/uv run pytest -m live` 时 pytest 默认捕获输出（仅失败时显示），可自行加 `-s`；
 - **事件循环约束**：`langchain-openai 1.7.2` 在进程内用 `lru_cache` 缓存默认 `httpx.AsyncClient`，
   该 client 不能跨事件循环复用；`tests/live/` 的测试因此用
   `@pytest.mark.asyncio(loop_scope="session")` 共享一个 session 级事件循环。新增 live 测试时沿用该写法
