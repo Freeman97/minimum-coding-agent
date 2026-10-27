@@ -118,3 +118,29 @@ async def test_live_tool_calling_smoke() -> None:
     assert final.tool_calls[0]["name"] == "echo_text"
     assert final.tool_calls[0]["args"].get("text") == "ping"
     print(f"[live] tool calls: {[(call['name'], call['args']) for call in final.tool_calls]}")
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_live_random_question_output() -> None:
+    model, _ = live_model()
+
+    deltas: list[str] = []
+    final = None
+    print("\n[live_random] assistant stream: ", end="", flush=True)
+    async for event in stream_chat(
+        model,
+        [HumanMessage(content="20个字内跟我描述一下你是什么模型")],
+    ):
+        if isinstance(event, TextDelta):
+            deltas.append(event.text)
+            print(event.text, end="", flush=True)
+        else:
+            assert isinstance(event, MessageComplete)
+            final = event.message
+    print(flush=True)
+
+    assert deltas, "expected incremental output from the live endpoint"
+    assert final is not None
+    assert isinstance(final.content, str)
+    assert final.content.strip()
+    print(f"[live_random] stream complete: {len(deltas)} fragments, {len(''.join(deltas))} chars")
