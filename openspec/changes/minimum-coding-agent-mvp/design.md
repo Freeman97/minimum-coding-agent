@@ -106,6 +106,7 @@ minimum-coding-agent/
 - **MVP 实现**：`OpenAICompatibleProvider`，基于 `langchain-openai` 的 `ChatOpenAI`，支持自定义 `base_url`、`api_key`、`model`、`temperature`、`max_tokens`、`timeout`。这是 README 要求的"暂只支持 OpenAI 格式"。
 - **扩展点**：`ProviderRegistry` 以名称注册（`openai-compatible`）；新增 Anthropic 只需新增 provider 模块并注册，不改运行时。注册契约写入 `docs/conventions.md`，并用一个测试用 provider 验证契约。
 - **脚本化模型**：测试专用 `ScriptedChatModel(BaseChatModel)`，按预置脚本返回 `AIMessage`（含 `tool_calls`）或流式片段。生产代码不感知该实现，符合 spec 的"可脚本化测试"。
+- **单事件循环约束（交接 M3/M5/M8）**：`langchain-openai 1.7.2` 在进程内用 `lru_cache` 缓存默认 `httpx.AsyncClient`（cache key 为 `base_url`/`timeout`/`socket_options`，**不含事件循环**），该 client 的连接池与 transport 绑定创建它的事件循环。因此一个进程内的模型只能在**同一个 asyncio 事件循环**内首次使用并持续复用：composition root 只暴露一个 async 入口，CLI 外层只调用一次 `asyncio.run()`；MCP 加载/关闭、agent 运行、上下文摘要必须在同一 loop；不得跨 `asyncio.run()` 或线程复用模型；确需多 loop（嵌入/notebook/测试）时须在目标 loop 内重建模型或共享同一 loop（真实端点测试用 `loop_scope="session"`）。M1 live 测试即因此修复，证据见 D17 M1。
 - **替代方案**：直接用 OpenAI SDK 自行封装 → 放弃 LangChain 消息/工具调用生态，成本更高；使用 LangChain 1.x 的 `create_agent` 高阶封装 → 隐藏 ReAct 循环，不利于学习。
 
 ### D4 工具系统
@@ -185,6 +186,7 @@ AgentError(message, where: Literal["model","tool","runtime"], retryable)
 ```
 
 - **取消**：运行时暴露异步迭代器；调用方（Textual worker）取消任务时关闭生成器，`RunFinished.reason="cancelled"` 由运行时保证发出。headless 渲染器把事件打印为人类可读文本，并复用同一运行时。
+- **单事件循环约束**：运行时、模型调用与（M8 起）MCP 工具生命周期必须在同一个 asyncio 事件循环内；composition root 提供单一 async 入口，CLI 只调用一次 `asyncio.run()`。禁止按阶段多次 `asyncio.run()` 后复用模型/MCP client（底层 async HTTP client 为进程级缓存且 loop 绑定，见 D3）。
 - **替代方案**：`create_react_agent` 预构建 → 隐藏循环细节且 API 随版本变动；自研 while 循环不用 LangGraph → 偏离 README 技术栈、失去 checkpointer/流式能力。
 
 ### D6 规划与 TODO
@@ -213,6 +215,7 @@ AgentError(message, where: Literal["model","tool","runtime"], retryable)
 - **结构**：`CodingAgentApp(App)` + `ChatLog`（ScrollableContainer，消息 widget）+ `ChatInput`（TextArea）+ `StatusBar` + `TodoPanel` + 危险命令确认 `ConfirmScreen`。
 - **样式**：MVP 不实现 Theme 模块与主题切换，仅用 `ui/styles.tcss` 提供最小布局与可读性样式；后续追加主题不涉及 Agent/工具接口，不构成 breaking change。
 - **并发模型**：提交输入后启动 `AgentRunWorker`（`@work(exclusive=True)` 异步 worker）；worker 消费 `AgentEvent` 流并通过 Textual 自定义消息（`messages.py`）`post_message` 给 UI；UI 主线程永不做阻塞调用。
+- **事件循环归属**：Textual `App.run()` 拥有进程的 asyncio 事件循环，`AgentRunWorker`、模型调用与 MCP 工具都在这一个 loop 内；不要在 `App.run()` 前后另起 `asyncio.run()` 再把模型/MCP client 带进 UI loop（约束见 D3/D5）。
 - **流式渲染**：`TokenDelta` 先累积，按 ~30ms 定时刷新到 `Markdown` widget，避免每 token 重排；`AssistantMessage` 到达后做最终渲染。
 - **工具卡片**：`ToolCallStarted` 创建卡片（工具名 + 参数摘要），`ToolCallFinished` 更新状态/结果摘要；失败状态用样式中的错误色并默认展开错误。
 - **取消**：运行中显示忙碌状态；`esc` 触发 worker 取消；取消后恢复输入。运行期间再次提交的处理：**排队或忽略**——MVP 选择"忽略并提示运行中"，避免队列复杂度。
@@ -241,7 +244,7 @@ AgentError(message, where: Literal["model","tool","runtime"], retryable)
 
 - **配置与传输扩展点**：`mcp.servers[]`（`name/transport/command/args/env/enabled`）；transport 经注册表解析，MVP 只注册 `stdio`，流式 HTTP/SSE 后续通过新增 transport 接入，不修改 loader/Agent/UI；启动时校验并给出错误项。
 - **加载**：`extensions/mcp_loader.py` 使用 `langchain-mcp-adapters` 的 `MultiServerMCPClient` 作为薄封装（隐藏第三方 API 细节），把返回工具包装为带命名空间 `mcp__<server>__<tool>` 的 LangChain 工具；名称冲突在 Registry 层检测。
-- **生命周期**：在 composition root 启动时异步加载，收集每个服务器的失败为 warning；应用退出时关闭所有连接/子进程。加载失败不影响内置工具与应用启动。
+- **生命周期**：在 composition root 启动时异步加载，收集每个服务器的失败为 warning；应用退出时关闭所有连接/子进程。加载失败不影响内置工具与应用启动。加载、调用与关闭必须位于与 agent 运行相同的事件循环（见 D3/D5 的单事件循环约束），MCP stdio transport 同样是 loop 绑定的。
 - **调用**：工具参数结构由 MCP server 声明生成；参数校验失败在本地拦截；远端错误/超时转换为工具结果错误返回模型。
 - **可验证**：`tests/fixtures/mcp_echo_server.py` 用官方 `mcp` SDK 实现的标准输入/输出替身服务器（提供 echo 工具与一个故意失败的服务器），测试离线运行；真实 server 通过配置接入验证。
 - **替代方案**：手写 JSON-RPC → 重复官方 SDK 工作；不隔离服务器失败 → 一个坏配置拖垮整个应用。
@@ -352,9 +355,10 @@ AgentError(message, where: Literal["model","tool","runtime"], retryable)
 - 与设计的偏差及原因：D1 的 `llm/{base,registry,openai_compatible}.py` 之外增加 `defaults.py`（默认注册表 + `create_chat_model` 装配入口）、`streaming.py`、`errors.py`、`scripted.py`、`__init__.py`，因为 M1 任务显式要求流式封装与脚本化模型；`app.py` composition root 仍按 M3 延后，M1 暂由 CLI 完成 provider 名称校验、`llm/defaults.py` 作为临时装配点（M3 迁入 `app.py` 后删除 CLI 校验）；开发依赖增加 `pytest-asyncio` 1.4.1（strict 模式）以测试异步流式调用。
 - 评审中定下的取舍：待人工 Review 后补充。
 - 实现层已定取舍：`ChatOpenAI` 固定 `max_retries=0`，超时/错误按配置时间暴露，重试策略留给运行时/用户；`ScriptedChatModel` 只实现异步流式（M3 运行时为异步），`bind_tools` 返回自身；空流判断兼容 LangChain 零片段 `ValueError` 哨兵（非哨兵 `ValueError` 仍归 UNKNOWN）。
-- 评审迭代修复（2026-10-27，真实端点 live smoke）：用户注入 `MCA_LIVE_*` 后 `make test-live` 失败——两个 live 测试各自使用 pytest-asyncio 的 function 级事件循环，而 `langchain-openai 1.7.2` 在进程内用 `lru_cache` 缓存默认 `httpx.AsyncClient`，第二个测试复用了第一个（已关闭）循环里的 client，报 `RuntimeError: Event loop is closed`（被 `stream_chat` 归类为 UNKNOWN `ModelCallError`）。对照实验确认：同循环多次调用正常、不同 cache key 或逐循环清缓存正常，故非 provider/错误分类缺陷；修复为 live 测试统一 `@pytest.mark.asyncio(loop_scope="session")` 共享一个 session 级事件循环，并在 `docs/providers.md`/`docs/conventions.md` 记录该约束。用 DeepSeek 真实端点验证 `make test-live` 连续 3 次 2 passed，离线 `make check` 仍 160 passed；生产代码无需修改（运行时单事件循环）。
+- 评审迭代修复（2026-10-27，真实端点 live smoke）：用户注入 `MCA_LIVE_*` 后 `make test-live` 失败——两个 live 测试各自使用 pytest-asyncio 的 function 级事件循环，而 `langchain-openai 1.7.2` 在进程内用 `lru_cache` 缓存默认 `httpx.AsyncClient`，第二个测试复用了第一个（已关闭）循环里的 client，报 `RuntimeError: Event loop is closed`（被 `stream_chat` 归类为 UNKNOWN `ModelCallError`）。对照实验确认：同循环多次调用正常、不同 cache key 或逐循环清缓存正常，故非 provider/错误分类缺陷；修复为 live 测试统一 `@pytest.mark.asyncio(loop_scope="session")` 共享一个 session 级事件循环，并在 `docs/providers.md`/`docs/conventions.md` 记录该约束。用 DeepSeek 真实端点验证 `make test-live` 连续 3 次 2 passed，离线 `make check` 仍 160 passed；生产代码无需修改（运行时单事件循环）。该约束已作为交接信息回写 D3/D5/D8/D11（不改变行为契约）。
 - 对后续模块的影响/前置条件：M3 用 `create_chat_model(settings)` 取模型、`model.bind_tools(...)` 后交给 `stream_chat()`，从 `MessageComplete.message.tool_calls` 驱动 ReAct 循环；未注册 provider 的 exit 4 已加入 conventions 退出码表（稳定契约）；M3/M4 集成测试用 `ScriptedChatModel(turns/repeat_last/seen_messages)`；新增 provider 必须同步 `docs/providers.md` 契约与 `tests/unit/test_provider_contract.py`；M9 live e2e 若使用真实 HTTP 模型，必须沿用 live 测试的 session 事件循环（或跨测试共享同一 client），否则会复现 `Event loop is closed`。
-- 遗留问题/已知限制：live smoke 已用 DeepSeek 真实端点验证通过（`make test-live` 连续 3 次 2 passed），但需要用户自备 `MCA_LIVE_*` 且不属于 CI 门禁；错误分类对 LangChain 空流哨兵字符串有耦合（有 UNKNOWN 安全回退）；未实现 Anthropic 等其它 provider（只有契约与样例）；M1 的 CLI/TUI/headless 仍为占位。
+- 对后续模块的单事件循环约束（交接）：M3/M5 的 composition root 只提供一个 async 入口，CLI 外层只调用一次 `asyncio.run()`（MCP 加载、agent 运行、摘要、关闭都在同一 loop）；M8 的 MCP 加载/调用/关闭与 agent 运行同 loop；M3–M9 不得跨 `asyncio.run()`/线程复用模型；M9 live e2e 用 `loop_scope="session"` 或共享同一 loop。根因与证据见上条"评审迭代修复"，实现要求见 D3/D5/D8/D11。
+- 遗留问题/已知限制：live smoke 已用 DeepSeek 真实端点验证通过（`make test-live` 连续 3 次 2 passed），但需要用户自备 `MCA_LIVE_*` 且不属于 CI 门禁；错误分类对 LangChain 空流哨兵字符串有耦合（有 UNKNOWN 安全回退）；未实现 Anthropic 等其它 provider（只有契约与样例）；M1 的 CLI/TUI/headless 仍为占位；嵌入/notebook 等多事件循环用法不在 MVP 范围，若未来支持须在目标 loop 内重建模型（不新增 M1 任务）。
 
 ## Risks / Trade-offs
 
