@@ -63,8 +63,7 @@ agent:
     # 压缩器按列表顺序执行；具体名称在 M3 实现上下文管线时确定，M0 阶段保持为空
     compressors: []
 
-# 内置工具集开关与限额；M0 只校验结构，工具在 M2（filesystem/editor/bash/todo）
-# 与 M7（search/code）接入
+# 内置工具集开关与限额；M2 提供 filesystem/editor/bash，M4 接入 todo，M7 接入 search/code
 tools:
   # 文件系统工具集：目录树与文件匹配
   filesystem:
@@ -78,6 +77,10 @@ tools:
   # 文本编辑器工具集：view / create / str_replace / insert
   editor:
     enabled: true
+    # 单文件读取、创建与编辑的大小上限（KB），>= 1；仅支持 UTF-8 文本
+    max_file_size_kb: 1024
+    # view 最多返回的内容字符数（含截断标记），>= 1000
+    max_output_chars: 20000
   # Shell 命令工具集
   bash:
     enabled: true

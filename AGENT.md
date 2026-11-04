@@ -57,7 +57,7 @@
 ## 文档与交付
 
 - 代码行为变化同步更新文档与示例配置；文档中的命令必须可实际执行，不得描述尚未实现的能力（当前
-  Makefile 只有 `setup`、`check`、`lint`、`test`、`test-live`、`run`、`demo-llm`）。
+  Makefile 提供 `setup`、`check`、`lint`、`test`、`test-live`、`run`、`demo-llm`、`demo-tools`）。
 - 完成后运行 `make check`，输出评审包（改了什么/为什么、接口变化、运行方式、检查输出、限制与风险、
   建议 Review 重点），停下等待人工 Review；字段与模板见 `docs/conventions.md` 第 11 节。
 - Review 通过后，先把结论与偏差写回 `design.md` D17 和 `tasks.md`（行为契约变化更新 `specs/`，方案变化

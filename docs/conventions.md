@@ -3,21 +3,23 @@
 本文件是仓库级工程约定的正文，面向人类开发者与 AI Coding Agent。`openspec/config.yaml` 只记录
 Agent 无法从代码推断的项目上下文，`AGENT.md` 是项目指令的简短版本，更细的工程规则以本文件为准。
 
-## 当前状态（M1）
+## 当前状态（M2）
 
-当前处于 M1（模型接入层）。下表中的"已存在"指本分支 `feat/m1-model-provider` 的真实能力：
+当前处于 M2（工具系统与基础工具）。下表中的"已存在"指本分支 `feat/m2-tool-system` 的真实能力：
 
-| 能力 | M1 现状 |
+| 能力 | M2 现状 |
 |---|---|
 | CLI `mca` | 参数解析、启动校验与 provider 名称校验；无子命令时打印 TUI 占位提示后退出；`mca run "<task>"` 为 headless 占位（M3 实现） |
 | 配置 | pydantic v2 Settings、分层加载、严格校验、启动前校验、密钥脱敏 |
 | 模型接入 | provider 协议/注册表、`openai-compatible` provider、流式封装、错误分类与脱敏、`ScriptedChatModel`、live smoke（见 `docs/providers.md`） |
+| 工具系统 | Toolset/Registry、JSON 结果、工作区路径护栏、tree/glob、原子文本编辑、异步 Bash（确认/超时/头尾截断/密钥剥离）；通过 Python API 与 `make demo-tools` 调用（见 `docs/tools.md`），M3 再接入 Agent |
 | 质量门禁 | `make check` = ruff + pydoclint + pytest（离线，默认排除 live） |
-| 工具系统 / TUI / 命令扩展 / AGENT.md 注入 / MCP | 分别由 M2 / M5 / M6 / M6 / M8 实现，M1 尚无这些能力 |
+| TODO / TUI / 命令扩展 / AGENT.md 注入 / 代码检索 / MCP | 分别由 M4 / M5 / M6 / M6 / M7 / M8 实现，M2 尚无这些能力 |
 
 因此：文档、示例配置与测试中不要宣称上表中"未实现"的能力已经可用；命令示例只使用当前真实存在的
-`make setup|check|lint|test|test-live|run|demo-llm` 与已实现的 `mca` 参数。`make test-live` 需要
-`MCA_LIVE_*` 环境变量，`make demo-llm` 是 M1 的离线 demo；`make demo` 在 M3 才加入。
+`make setup|check|lint|test|test-live|run|demo-llm|demo-tools` 与已实现的 `mca` 参数。`make test-live` 需要
+`MCA_LIVE_*` 环境变量，`make demo-llm` / `make demo-tools` 分别是 M1 / M2 的离线 demo；
+headless 端到端 `make demo` 按任务在 M9 加入。
 
 ## 1. 语言与命名
 
@@ -45,7 +47,7 @@ minimum-coding-agent/
 │   ├── config/                     # M0：settings / loader / validation
 │   ├── app.py                      # 规划：composition root（M3 起接入）
 │   ├── llm/                        # M1：provider 协议/注册表/流式封装/错误分类/脚本化模型
-│   ├── tools/                      # 规划：M2 工具系统（M7 增加代码工具）
+│   ├── tools/                      # M2：注册/路径护栏/文件系统/编辑/Bash（M7 增加代码工具）
 │   ├── agent/                      # 规划：M3 运行时 / 事件 / 上下文压缩
 │   ├── codeintel/                  # 规划：M7 代码智能
 │   ├── extensions/                 # 规划：M6 命令与 AGENT.md、M8 MCP
@@ -96,6 +98,7 @@ minimum-coding-agent/
 | `make check` | `lint` + `test` | 质量门禁，提交与评审前必须全绿 |
 | `make run` | `.tools/uv run mca` | 启动交互控制台；M5 前只打印占位提示并退出 |
 | `make demo-llm` | `.tools/uv run python scripts/demo_llm.py` | M1 模型接入层离线 demo（不访问网络） |
+| `make demo-tools` | `.tools/uv run python scripts/demo_tools.py` | M2 工具系统离线 demo（临时工作区、无网络、无需模型密钥） |
 
 - `make lint` 的 ruff 范围是 `src tests`（`scripts/` 等不参与），pydoclint 只检查 `src`。
 - `make run` 前必须有可用的 provider 配置与 API Key（例如 `MCA_CONFIG=config/agent.yaml DEEPSEEK_API_KEY=... make run`）；
@@ -105,6 +108,7 @@ minimum-coding-agent/
 - `make test-live` 只在显式提供 `MCA_LIVE_BASE_URL` / `MCA_LIVE_API_KEY` / `MCA_LIVE_MODEL` 后执行真实
   调用；不要把密钥写进脚本、测试或 CI，也不要把它并入日常门禁。
 - `make demo-llm` 是 M1 的离线评审 demo：展示配置映射、脚本化流式输出与错误脱敏，不需要 API Key。
+- `make demo-tools` 展示 7 个 M2 工具、原子编辑与拒绝路径，断言文件内容和 Bash 退出码。
 - 首次使用、依赖变化或 `uv.lock` 更新后重新执行 `make setup`；bootstrap 是幂等的，失败会重试依赖同步。
 - 不要在 `make setup` 运行期间并行执行 `make check` 等目标（会争用同一个 `.venv`）。
 
@@ -214,8 +218,9 @@ def count_lines(path: Path) -> int:
   相关文档，并在当前模块的测试中覆盖默认值、合法值与非法值；否则示例配置会因未知键而启动失败。
 
 `provider` 与后续模块的关系：M1 已实现 provider 层与启动期 provider 名称校验（未注册名称以退出码 4
-终止并列出可用名称）；TUI/headless 运行时仍为占位，`agent`、`tools`、`mcp` 等配置段分别由 M3、
-M2/M7、M8 消费。示例文件中出现这些键是 schema 要求，不代表对应能力已实现；provider 的配置映射与
+终止并列出可用名称）；M2 已实现 filesystem/editor/bash，TUI/headless 运行时仍为占位；
+`agent`、TODO、search/code、`mcp` 等配置分别由 M3、M4、M7、M8 消费。
+示例文件中出现这些键是 schema 要求，不代表对应能力已实现；provider 的配置映射与
 扩展契约见 `docs/providers.md`。
 
 ## 8. 密钥与敏感信息
@@ -257,7 +262,7 @@ headless 运行时失败、迭代上限等运行期退出码在 M3 定义，并�
 
 ## 10. 分支、提交与合并
 
-- 分支命名：`feat/mX-<topic>`，一个模块一条分支（当前 M1 为 `feat/m1-model-provider`，M0 已合并）；从最新的 `master`
+- 分支命名：`feat/mX-<topic>`，一个模块一条分支（当前 M2 为 `feat/m2-tool-system`，M0/M1 已合并）；从最新的 `master`
   切出，Review 通过后合回 `master`。
 - 提交信息：英文 Conventional Commits，格式 `<type>(<module>): <subject>`，scope 用模块号。
   - 示例：`feat(m0): add layered configuration loader`、`test(m0): cover CLI exit codes`、

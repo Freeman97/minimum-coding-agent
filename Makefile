@@ -9,7 +9,7 @@ export UV_CACHE_DIR := $(ROOT)/.uv-cache
 export UV_PYTHON_INSTALL_DIR := $(ROOT)/.uv-python
 export UV_PROJECT_ENVIRONMENT := $(ROOT)/.venv
 
-.PHONY: help setup check lint test test-live run demo-llm
+.PHONY: help setup check lint test test-live run demo-llm demo-tools
 
 help:
 	@printf '%s\n' \
@@ -19,7 +19,8 @@ help:
 		'make test    Run the offline test suite' \
 		'make test-live  Run live model smoke tests and echo the stream (needs MCA_LIVE_*)' \
 		'make run     Start the interactive console (placeholder until M5)' \
-		'make demo-llm   Run the offline model access layer demo (no network)'
+		'make demo-llm   Run the offline model access layer demo (no network)' \
+		'make demo-tools Run the tools demo in a temporary workspace (no network)'
 
 setup:
 	@bash scripts/bootstrap.sh
@@ -41,6 +42,9 @@ test-live: $(UV)
 
 demo-llm: $(UV)
 	$(UV) run python scripts/demo_llm.py
+
+demo-tools: $(UV)
+	$(UV) run python scripts/demo_tools.py
 
 run: $(UV)
 	$(UV) run mca

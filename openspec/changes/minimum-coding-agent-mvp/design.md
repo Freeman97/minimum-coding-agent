@@ -361,6 +361,18 @@ AgentError(message, where: Literal["model","tool","runtime"], retryable)
 - 对后续模块的单事件循环约束（交接）：M3/M5 的 composition root 只提供一个 async 入口，CLI 外层只调用一次 `asyncio.run()`（MCP 加载、agent 运行、摘要、关闭都在同一 loop）；M8 的 MCP 加载/调用/关闭与 agent 运行同 loop；M3–M9 不得跨 `asyncio.run()`/线程复用模型；M9 live e2e 用 `loop_scope="session"` 或共享同一 loop。根因与证据见上条"评审迭代修复"，实现要求见 D3/D5/D8/D11。
 - 遗留问题/已知限制：live smoke 已用 DeepSeek 真实端点验证通过（评审迭代期间 `make test-live` 连续 3 次 2 passed；用户评审期间新增第 3 个随机输出用例，本会话未再执行 live），需要用户自备 `MCA_LIVE_*` 且不属于 CI 门禁（默认 `make check` 中 3 个 live 用例 deselected）；错误分类对 LangChain 空流哨兵字符串有耦合（有 UNKNOWN 安全回退）；未实现 Anthropic 等其它 provider（只有契约与样例）；M1 的 CLI/TUI/headless 仍为占位；嵌入/notebook 等多事件循环用法不在 MVP 范围，若未来支持须在目标 loop 内重建模型（不新增 M1 任务）。
 
+#### M2 工具系统与基础工具
+
+- 分支/提交：`feat/m2-tool-system`，`6d6736f..feat/m2-tool-system`（本模块实现与交接；待人工 Review，未合并）。
+- 交付范围：`Toolset`/`ToolContext`/事务式 Registry、pydantic 参数与 JSON 结果包装、`WorkspaceGuard`、7 个 filesystem/editor/bash 工具、`docs/tools.md` 与离线 `make demo-tools`；新增 `editor.max_file_size_kb=1024` / `max_output_chars=20000` 落实 spec 的大小/输出上限。
+- 与设计的偏差及原因：无行为契约或 D1–D16 方案变更；文件工具按 D4 规范化路径后校验，Bash 保持 cwd/确认/超时/截断边界。
+- 实现层取舍：创建用同目录临时文件 + `os.link` 原子发布且拒绝覆盖，父目录须存在；替换/插入用 `os.replace` 并保留权限与原换行，唯一性校验包含重叠匹配；目录链接不递归，外部链接不列出。
+- 实现层取舍：Bash 仅异步调用，超时参数不超过配置上限；并发持续读取两路输出并保留有界头尾，超时/取消/正常退出都清理同组后台进程；环境剥离已知密钥与 shell 启动钩子，无确认回调时拒绝危险命令。
+- 对后续模块的影响/前置条件：沿用 D4/D5，在装配层用 `create_tool_registry(settings)` 获取工具，`registry.tools()` 可供模型绑定与 ToolNode；完整 tool call 保留 `tool_call_id`，Bash 错误附带输出/退出码，取消继续传播；M5 通过现有 async 确认回调接 UI，无新增后续任务。
+- 验证环境限制：本会话沙箱对 asyncio self-pipe 的 `send` 返回 `EPERM`，最小 `asyncio.to_thread` 与原 M1 测试均复现挂起；完整离线门禁及 demo 在获准的沙箱外环境验证，未改动 M1 代码或依赖来绕过。
+- 遗留问题/已知限制：Bash 启发式确认不等于系统沙箱，主动脱离进程组的程序不保证被清理；路径护栏不防恶意并发换链；工具现通过 Python API/demo 使用，Agent 接入仍属 M3，详见工具文档。
+- 评审状态：3.1–3.6 已完成；3.7 Review Gate 未勾选，等待用户明确批准后再收尾合并。
+
 ## Risks / Trade-offs
 
 - [LangGraph/LangChain 1.x API 变动] → 锁定依赖主版本；显式图与 `astream` 用法用集成测试覆盖；避免依赖高阶封装。

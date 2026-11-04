@@ -141,6 +141,8 @@ class EditorSettings(SettingsModel):
     """Configuration of the text editor toolset."""
 
     enabled: bool = True
+    max_file_size_kb: int = Field(default=1024, ge=1)
+    max_output_chars: int = Field(default=20000, ge=1000)
 
 
 class BashSettings(SettingsModel):
