@@ -1,7 +1,8 @@
 """Command line interface for the minimum coding agent.
 
-M0 provides the argument surface and the startup checks; the interactive console
-and the headless runtime are placeholders until their own modules land.
+M0 provides the argument surface and the startup checks; M1 adds the provider
+registry startup check. The interactive console and the headless runtime are
+placeholders until their own modules land.
 """
 
 from __future__ import annotations
@@ -16,6 +17,8 @@ from minimum_coding_agent import __version__
 from minimum_coding_agent.config.loader import ConfigLoadError, load_settings
 from minimum_coding_agent.config.settings import Settings
 from minimum_coding_agent.config.validation import StartupValidationError, validate_startup
+from minimum_coding_agent.llm.defaults import create_default_registry
+from minimum_coding_agent.llm.errors import UnknownProviderError
 
 PROG = "mca"
 
@@ -105,6 +108,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         return int(ExitCode.STARTUP_ERROR)
     for warning in warnings:
         print(f"warning: {warning}", file=sys.stderr)
+
+    # Until the composition root (app.py, M3) exists, the CLI resolves the
+    # configured provider name so an unknown provider fails before any
+    # interface starts and lists the registered alternatives.
+    try:
+        create_default_registry().get(settings.provider.name)
+    except UnknownProviderError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return int(ExitCode.STARTUP_ERROR)
 
     if args.command == "run":
         return _run_headless(settings, args.task)
